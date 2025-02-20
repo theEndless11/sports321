@@ -1,9 +1,26 @@
 import { promisePool } from '../utils/db';  // Corrected to use MySQL connection pool
 import { publishToAbly } from '../utils/ably';  // Assuming this remains the same
+import multer from 'multer';
+import path from 'path';
+
+// Set up Multer for photo uploads (store in 'uploads' folder)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, './uploads/');  // Folder where photos will be saved
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname));  // Unique file name
+  }
+});
+
+const upload = multer({ storage: storage });
+
+// Middleware for handling photo uploads in POST request
+const uploadPhoto = upload.single('photo');
 
 // Set CORS headers
 const setCorsHeaders = (req, res) => {
-    const allowedOrigins = ['https:///latestnewsandaffairs.site'];  // Add more origins if needed
+    const allowedOrigins = ['https://latestnewsandaffairs.site'];  // Add more origins if needed
     const origin = req.headers.origin;
 
     if (allowedOrigins.includes(origin)) {
@@ -39,10 +56,21 @@ export default async function handler(req, res) {
         }
 
         try {
-            // Insert the new post into MySQL
+            // Upload photo if provided in the request
+            let photoPath = null;
+
+            // Check if the request has a file (from the photo upload)
+            if (req.file) {
+                photoPath = `/uploads/${req.file.filename}`;  // Save file path
+            } else if (req.body.photo && req.body.photo.startsWith('data:image')) {
+                // Check if the photo is sent as base64 data
+                photoPath = req.body.photo;  // Save base64 string
+            }
+
+            // Insert the new post into MySQL with or without photo
             const [result] = await promisePool.execute(
-                'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?)',
-                [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([])]
+                'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
+                [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoPath || null]
             );
 
             const newPost = {
@@ -54,9 +82,11 @@ export default async function handler(req, res) {
                 dislikes: 0,
                 likedBy: [],
                 dislikedBy: [],
-                comments: []
+                comments: [],
+                photo: photoPath  // Include the photo path or base64 string
             };
 
+            // Publish the new post to Ably
             try {
                 await publishToAbly('newOpinion', newPost);
             } catch (error) {
@@ -70,7 +100,7 @@ export default async function handler(req, res) {
         }
     }
 
-    // PUT/PATCH: Handle likes/dislikes
+    // PUT/PATCH: Handle likes/dislikes (same as before)
     if (req.method === 'PUT' || req.method === 'PATCH') {
         const { postId, action, username } = req.body;  // action can be 'like' or 'dislike'
 
