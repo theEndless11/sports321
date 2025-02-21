@@ -1,25 +1,22 @@
-import fs from 'fs';
-import path from 'path';
-import express from 'express';
-import multer from 'multer';
-import { promisePool } from '../utils/db';
-import { publishToAbly } from '../utils/ably';
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
+const { promisePool } = require('../utils/db');
+const { publishToAbly } = require('../utils/ably');
 
 // Use Vercel's /tmp directory for temporary uploads
 const uploadDir = '/tmp/uploads'; // Vercel only supports /tmp for file storage
 
-// Ensure the uploads directory exists in the /tmp folder
+// Ensure the uploads directory exists in /tmp
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
     console.log('Uploads directory created in /tmp');
 }
 
-const app = express();
-app.use(express.json());
-
+// Set up storage for photo uploads (store in '/tmp/uploads' folder)
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        console.log(`Using Vercel's temporary upload path: ${uploadDir}`); // Log the upload directory
+        console.log(`Using Vercel's temporary upload path: ${uploadDir}`);
         cb(null, uploadDir); // Store files in /tmp/uploads
     },
     filename: (req, file, cb) => {
@@ -32,6 +29,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 const uploadPhoto = upload.single('photo');
 
+// Set CORS headers for API requests
 const setCorsHeaders = (req, res) => {
     const allowedOrigins = ['https://latestnewsandaffairs.site'];
     const origin = req.headers.origin;
@@ -42,7 +40,7 @@ const setCorsHeaders = (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
 };
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') {
         setCorsHeaders(req, res);
         return res.status(200).end();
@@ -52,7 +50,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
         try {
-            // Wait for the upload to complete
+            // Wait for the file upload to complete
             await new Promise((resolve, reject) => {
                 uploadPhoto(req, res, (err) => {
                     if (err) {
@@ -99,8 +97,6 @@ export default async function handler(req, res) {
             return res.status(500).json({ message: 'Error saving post', error });
         }
     }
-}
-
 
     if (req.method === 'PUT' || req.method === 'PATCH') {
         const { postId, action, username } = req.body;
