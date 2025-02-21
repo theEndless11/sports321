@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
-import { promisePool } from '../utils/db';  // Corrected to use MySQL connection pool
-import { publishToAbly } from '../utils/ably';  // Assuming this remains the same
+import { promisePool } from '../utils/db';
+import { publishToAbly } from '../utils/ably';
 import path from 'path';
 
 const app = express();
@@ -55,6 +55,7 @@ export default async function handler(req, res) {
         // Use middleware to parse the body
         uploadPhoto(req, res, async (err) => {
             if (err) {
+                // If there is an error during file upload, respond immediately
                 return res.status(500).json({ message: 'Error uploading photo', error: err });
             }
 
@@ -107,12 +108,15 @@ export default async function handler(req, res) {
                     console.error('Error publishing to Ably:', error);
                 }
 
+                // Ensure that only one response is sent
                 return res.status(201).json(newPost);
+
             } catch (error) {
                 console.error('Error saving post:', error);
                 return res.status(500).json({ message: 'Error saving post', error });
             }
         });
+
     }
 
     // PUT/PATCH: Handle likes/dislikes (same as before)
