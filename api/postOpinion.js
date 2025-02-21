@@ -1,7 +1,13 @@
+import express from 'express';
+import multer from 'multer';
 import { promisePool } from '../utils/db';  // Corrected to use MySQL connection pool
 import { publishToAbly } from '../utils/ably';  // Assuming this remains the same
-import multer from 'multer';
 import path from 'path';
+
+const app = express();
+
+// Body parsing middleware for JSON data
+app.use(express.json());
 
 // Set up Multer for photo uploads (store in 'uploads' folder)
 const storage = multer.diskStorage({
@@ -46,59 +52,67 @@ export default async function handler(req, res) {
 
     // POST: Create new post
     if (req.method === 'POST') {
-        const { message, username, sessionId } = req.body;
-
-        if (!message || message.trim() === '') {
-            return res.status(400).json({ message: 'Message cannot be empty' });
-        }
-        if (!username || !sessionId) {
-            return res.status(400).json({ message: 'Username and sessionId are required' });
-        }
-
-        try {
-            // Upload photo if provided in the request
-            let photoPath = null;
-
-            // Check if the request has a file (from the photo upload)
-            if (req.file) {
-                // File is uploaded, store file path
-                photoPath = `/uploads/${req.file.filename}`;
-            } else if (req.body.photo && req.body.photo.startsWith('data:image')) {
-                // If photo is sent as base64
-                photoPath = req.body.photo;
+        // Use middleware to parse the body
+        uploadPhoto(req, res, async (err) => {
+            if (err) {
+                return res.status(500).json({ message: 'Error uploading photo', error: err });
             }
 
-            // Insert the new post into MySQL with or without photo
-            const [result] = await promisePool.execute(
-                'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
-                [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoPath || null]
-            );
+            const { message, username, sessionId } = req.body;  // Destructure from req.body
 
-            const newPost = {
-                _id: result.insertId,  // MySQL auto-incremented ID
-                message,
-                timestamp: new Date(),
-                username,
-                likes: 0,
-                dislikes: 0,
-                likedBy: [],
-                dislikedBy: [],
-                comments: [],
-                photo: photoPath  // Include the photo path or base64 string
-            };
+            // Check for missing fields
+            if (!message || message.trim() === '') {
+                return res.status(400).json({ message: 'Message cannot be empty' });
+            }
+            if (!username || !sessionId) {
+                return res.status(400).json({ message: 'Username and sessionId are required' });
+            }
 
-            // Publish the new post to Ably
             try {
-                await publishToAbly('newOpinion', newPost);
-            } catch (error) {
-                console.error('Error publishing to Ably:', error);
-            }
+                // Upload photo if provided in the request
+                let photoPath = null;
 
-            return res.status(201).json(newPost);
-        } catch (error) {
-            console.error('Error saving post:', error);
-            return res.status(500).json({ message: 'Error saving post', error });
-        }
+                // Check if the request has a file (from the photo upload)
+                if (req.file) {
+                    // File is uploaded, store file path
+                    photoPath = `/uploads/${req.file.filename}`;
+                } else if (req.body.photo && req.body.photo.startsWith('data:image')) {
+                    // If photo is sent as base64
+                    photoPath = req.body.photo;
+                }
+
+                // Insert the new post into MySQL with or without photo
+                const [result] = await promisePool.execute(
+                    'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
+                    [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoPath || null]
+                );
+
+                const newPost = {
+                    _id: result.insertId,  // MySQL auto-incremented ID
+                    message,
+                    timestamp: new Date(),
+                    username,
+                    likes: 0,
+                    dislikes: 0,
+                    likedBy: [],
+                    dislikedBy: [],
+                    comments: [],
+                    photo: photoPath  // Include the photo path or base64 string
+                };
+
+                // Publish the new post to Ably
+                try {
+                    await publishToAbly('newOpinion', newPost);
+                } catch (error) {
+                    console.error('Error publishing to Ably:', error);
+                }
+
+                return res.status(201).json(newPost);
+            } catch (error) {
+                console.error('Error saving post:', error);
+                return res.status(500).json({ message: 'Error saving post', error });
+            }
+        });
     }
 
     // PUT/PATCH: Handle likes/dislikes (same as before)
