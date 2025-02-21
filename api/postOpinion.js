@@ -41,7 +41,6 @@ const setCorsHeaders = (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
 };
 
-// Handle post actions (creating, liking, disliking)
 export default async function handler(req, res) {
     if (req.method === 'OPTIONS') {
         setCorsHeaders(req, res);
@@ -109,7 +108,7 @@ export default async function handler(req, res) {
                 }
 
                 // Ensure that only one response is sent
-                return res.status(201).json(newPost);
+                return res.status(201).json(newPost);  // This is the final response
 
             } catch (error) {
                 console.error('Error saving post:', error);
@@ -199,4 +198,3 @@ export default async function handler(req, res) {
     // Handle other methods
     return res.status(405).json({ message: 'Method Not Allowed' });
 }
-
