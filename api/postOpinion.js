@@ -10,7 +10,7 @@ const storage = multer.diskStorage({
         cb(null, './uploads/');
     },
     filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
+        cb(null, Date.now() + path.extname(file.originalname)); // Unique filename
     }
 });
 
@@ -22,7 +22,7 @@ const jsonParser = bodyParser.json();
 
 // Middleware for handling CORS headers
 const setCorsHeaders = (req, res) => {
-    const allowedOrigins = ['https://latestnewsandaffairs.site']; 
+    const allowedOrigins = ['https://latestnewsandaffairs.site'];  // Replace with your actual allowed origins
     const origin = req.headers.origin;
 
     if (allowedOrigins.includes(origin)) {
@@ -61,7 +61,7 @@ export default async function handler(req, res) {
             jsonParser(req, res, async () => {
                 // If `req.body` is empty, send the "Method Not Allowed" response before further processing
                 if (!req.body.message || !req.body.username || !req.body.sessionId) {
-                    return res.status(405).json({ message: 'Method Not Allowed' });
+                    return res.status(400).json({ message: 'Message, username, and sessionId are required' });
                 }
 
                 const { message, username, sessionId } = req.body;
