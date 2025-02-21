@@ -7,12 +7,21 @@ import path from 'path';
 const app = express();
 app.use(express.json());
 
-// Set up Multer for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, './uploads/'),
-  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
+    destination: (req, file, cb) => {
+        const uploadDir = path.join(__dirname, '../uploads'); // Ensure absolute path is used
+        console.log(`Uploading to: ${uploadDir}`);
+        cb(null, uploadDir); // Save file in 'uploads' folder
+    },
+    filename: (req, file, cb) => {
+        const filename = `${Date.now()}${path.extname(file.originalname)}`;
+        console.log(`Saving file as: ${filename}`);
+        cb(null, filename); // Set filename as current timestamp + extension
+    }
 });
+
 const upload = multer({ storage });
+
 const uploadPhoto = upload.single('photo');
 
 const setCorsHeaders = (req, res) => {
