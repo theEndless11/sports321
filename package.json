@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "dependencies": {
     "ably": "^2.6.3",
     "bcryptjs": "^2.4.3",
