@@ -5,11 +5,13 @@ import multer from 'multer';
 import { promisePool } from '../utils/db';
 import { publishToAbly } from '../utils/ably';
 
-// Ensure the uploads directory exists
-const uploadDir = path.resolve('uploads');
+// Use Vercel's /tmp directory for temporary uploads
+const uploadDir = '/tmp/uploads'; // Vercel only supports /tmp for file storage
+
+// Ensure the uploads directory exists in the /tmp folder
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
-    console.log('Uploads directory created');
+    console.log('Uploads directory created in /tmp');
 }
 
 const app = express();
@@ -17,14 +19,13 @@ app.use(express.json());
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = path.join(__dirname, '../uploads'); // Log the resolved path
-        console.log(`Resolved upload path: ${uploadDir}`); // Add this log for debugging
-        cb(null, uploadDir); // Save file in 'uploads' folder
+        console.log(`Using Vercel's temporary upload path: ${uploadDir}`); // Log the upload directory
+        cb(null, uploadDir); // Store files in /tmp/uploads
     },
     filename: (req, file, cb) => {
         const filename = `${Date.now()}${path.extname(file.originalname)}`;
         console.log(`Saving file as: ${filename}`);
-        cb(null, filename); // Set filename as current timestamp + extension
+        cb(null, filename);
     }
 });
 
@@ -51,6 +52,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
         try {
+            // Wait for the upload to complete
             await new Promise((resolve, reject) => {
                 uploadPhoto(req, res, (err) => {
                     if (err) {
@@ -66,8 +68,10 @@ export default async function handler(req, res) {
             if (!message || !message.trim()) return res.status(400).json({ message: 'Message cannot be empty' });
             if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
 
-            let photoPath = req.file ? `/uploads/${req.file.filename}` : req.body.photo?.startsWith('data:image') ? req.body.photo : null;
+            // Determine the file path for the uploaded photo
+            let photoPath = req.file ? `/tmp/uploads/${req.file.filename}` : req.body.photo?.startsWith('data:image') ? req.body.photo : null;
 
+            // Insert the new post into MySQL with or without a photo
             const [result] = await promisePool.execute(
                 'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
                 [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoPath]
@@ -86,6 +90,7 @@ export default async function handler(req, res) {
                 photo: photoPath
             };
 
+            // Publish the new post to Ably
             await publishToAbly('newOpinion', newPost).catch((error) => console.error('Error publishing to Ably:', error));
 
             return res.status(201).json(newPost);
@@ -94,6 +99,8 @@ export default async function handler(req, res) {
             return res.status(500).json({ message: 'Error saving post', error });
         }
     }
+}
+
 
     if (req.method === 'PUT' || req.method === 'PATCH') {
         const { postId, action, username } = req.body;
