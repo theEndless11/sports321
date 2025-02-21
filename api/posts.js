@@ -1,4 +1,4 @@
-import { promisePool } from '../utils/db';  // Use the MySQL connection pool from db.js
+import { promisePool } from '../utils/db'; // Use MySQL connection pool
 
 // Set CORS headers for all methods
 const setCorsHeaders = (res) => {
@@ -33,9 +33,10 @@ export default async function handler(req, res) {
                 sessionId: post.sessionId,
                 likes: post.likes,
                 dislikes: post.dislikes,
-                likedBy: JSON.parse(post.likedBy),  // Parse JSON string back to array
-                dislikedBy: JSON.parse(post.dislikedBy),  // Parse JSON string back to array
-                comments: JSON.parse(post.comments)  // Parse JSON string back to array of comments
+                likedBy: post.likedBy ? JSON.parse(post.likedBy) : [], // Parse JSON string back to array
+                dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [], // Parse JSON string back to array
+                comments: post.comments ? JSON.parse(post.comments) : [], // Parse JSON string back to array
+                photo: post.photo || null // Ensure photo is included in the response
             }));
 
             // Send posts as a JSON response
