@@ -9,8 +9,8 @@ app.use(express.json());
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = path.join(__dirname, '../uploads'); // Ensure absolute path is used
-        console.log(`Uploading to: ${uploadDir}`);
+        const uploadDir = path.join(__dirname, '../uploads'); // Log the resolved path
+        console.log(`Resolved upload path: ${uploadDir}`); // Add this log for debugging
         cb(null, uploadDir); // Save file in 'uploads' folder
     },
     filename: (req, file, cb) => {
@@ -19,7 +19,6 @@ const storage = multer.diskStorage({
         cb(null, filename); // Set filename as current timestamp + extension
     }
 });
-
 const upload = multer({ storage });
 
 const uploadPhoto = upload.single('photo');
