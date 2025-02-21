@@ -50,26 +50,35 @@ export default async function handler(req, res) {
 
     // POST: Create new post
     if (req.method === 'POST') {
+        console.log('Received POST request');
+
         // If the request contains a file (multipart), use multer to parse it
         uploadPhoto(req, res, async (err) => {
             if (err) {
-                // Return early if multer has an error
+                console.error('Error uploading file:', err);
                 return res.status(500).json({ message: 'Error uploading file', error: err });
             }
+
+            // Log the incoming request data after multer parses the file
+            console.log('File uploaded successfully, parsing body...');
+            console.log('Request body:', req.body);
 
             // After multer parses the file, parse the JSON body
             jsonParser(req, res, async () => {
                 // If `req.body` is empty, send the "Method Not Allowed" response before further processing
                 if (!req.body.message || !req.body.username || !req.body.sessionId) {
+                    console.log('Missing message, username, or sessionId');
                     return res.status(400).json({ message: 'Message, username, and sessionId are required' });
                 }
 
                 const { message, username, sessionId } = req.body;
 
                 if (!message || message.trim() === '') {
+                    console.log('Message is empty');
                     return res.status(400).json({ message: 'Message cannot be empty' });
                 }
                 if (!username || !sessionId) {
+                    console.log('Missing username or sessionId');
                     return res.status(400).json({ message: 'Username and sessionId are required' });
                 }
 
@@ -78,9 +87,11 @@ export default async function handler(req, res) {
 
                     // Check if the request contains a file
                     if (req.file) {
+                        console.log('Photo uploaded:', req.file.filename);
                         photoPath = `/uploads/${req.file.filename}`;
                     } else if (req.body.photo && req.body.photo.startsWith('data:image')) {
                         // Check if the photo is sent as base64 data
+                        console.log('Received base64 photo data');
                         photoPath = req.body.photo;
                     }
 
@@ -105,12 +116,14 @@ export default async function handler(req, res) {
 
                     // Publish to Ably
                     try {
+                        console.log('Publishing to Ably...');
                         await publishToAbly('newOpinion', newPost);
                     } catch (error) {
                         console.error('Error publishing to Ably:', error);
                     }
 
                     // Respond with the newly created post
+                    console.log('Post created successfully:', newPost);
                     return res.status(201).json(newPost);
                 } catch (error) {
                     console.error('Error saving post:', error);
@@ -120,6 +133,7 @@ export default async function handler(req, res) {
         });
     } else {
         // If method is not POST, return Method Not Allowed
+        console.log('Method Not Allowed:', req.method);
         return res.status(405).json({ message: 'Method Not Allowed' });
     }
 }
