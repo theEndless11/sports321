@@ -1,8 +1,16 @@
+import fs from 'fs';
+import path from 'path';
 import express from 'express';
 import multer from 'multer';
 import { promisePool } from '../utils/db';
 import { publishToAbly } from '../utils/ably';
-import path from 'path';
+
+// Ensure the uploads directory exists
+const uploadDir = path.resolve('uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+    console.log('Uploads directory created');
+}
 
 const app = express();
 app.use(express.json());
@@ -19,8 +27,8 @@ const storage = multer.diskStorage({
         cb(null, filename); // Set filename as current timestamp + extension
     }
 });
-const upload = multer({ storage });
 
+const upload = multer({ storage });
 const uploadPhoto = upload.single('photo');
 
 const setCorsHeaders = (req, res) => {
