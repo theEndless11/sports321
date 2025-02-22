@@ -30,7 +30,7 @@ const handler = async (req, res) => {
 
     setCorsHeaders(req, res);
 
-  if (req.method === 'GET') {
+if (req.method === 'GET') {
     const { postId } = req.query;
 
     if (!postId) {
@@ -38,23 +38,18 @@ const handler = async (req, res) => {
     }
 
     try {
-        // Fetch the image from the database
         const [postRows] = await promisePool.execute('SELECT photo FROM posts WHERE _id = ?', [postId]);
 
         if (!postRows.length) {
             return res.status(404).json({ message: 'Post not found' });
         }
 
-        const imageBuffer = postRows[0].photo;
+        const base64Image = postRows[0].photo;
 
-        if (!imageBuffer || imageBuffer.length === 0) {
+        if (!base64Image) {
             return res.status(404).json({ message: 'No image found for this post' });
         }
 
-        // **Fix: Convert Buffer to Proper Base64 Format**
-        const base64Image = `data:image/webp;base64,${imageBuffer.toString('base64')}`;
-
-        // **Send JSON Response with Properly Formatted Base64 Image**
         return res.status(200).json({ image: base64Image });
 
     } catch (error) {
@@ -63,64 +58,60 @@ const handler = async (req, res) => {
     }
 }
 
-    // ✅ **Handle POST Request to Create a New Post**
+
     if (req.method === 'POST') {
-        try {
-            // Handle file upload
-            await new Promise((resolve, reject) => {
-                uploadPhoto(req, res, (err) => {
-                    if (err) reject({ message: 'Error uploading photo', error: err });
-                    else resolve();
-                });
+    try {
+        await new Promise((resolve, reject) => {
+            uploadPhoto(req, res, (err) => {
+                if (err) reject({ message: 'Error uploading photo', error: err });
+                else resolve();
             });
+        });
 
-            const { message, username, sessionId } = req.body;
-            if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
+        const { message, username, sessionId } = req.body;
+        if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
 
-            if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
-                return res.status(400).json({ message: 'Message or photo is required' });
-            }
-
-            let photoBuffer = null;
-
-            if (req.file) {
-                // If file is uploaded, store as binary (BLOB)
-                photoBuffer = req.file.buffer;
-            } else if (req.body.photo?.startsWith('data:image')) {
-                // Convert base64 image to binary
-                const matches = req.body.photo.match(/^data:image\/([a-zA-Z]*);base64,([^\"]*)/);
-                photoBuffer = Buffer.from(matches[2], 'base64');
-            }
-
-            // Insert post into the database
-            const [result] = await promisePool.execute(
-                'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
-                [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoBuffer]
-            );
-
-            // Construct API URL for frontend image retrieval
-            const photoUrl = photoBuffer ? `https://sports321.vercel.app/api/postOpinion?postId=${result.insertId}` : null;
-
-            const newPost = {
-                _id: result.insertId,
-                message,
-                timestamp: new Date(),
-                username,
-                likes: 0,
-                dislikes: 0,
-                likedBy: [],
-                dislikedBy: [],
-                comments: [],
-                photo: photoUrl
-            };
-
-            console.log("📸 New Post Created:", newPost);
-            return res.status(201).json(newPost);
-        } catch (error) {
-            console.error('Error saving post:', error);
-            return res.status(500).json({ message: 'Error saving post', error });
+        if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
+            return res.status(400).json({ message: 'Message or photo is required' });
         }
+
+        let photoBase64 = null;
+
+        if (req.file) {
+            // Convert image to Base64
+            const imageType = req.file.mimetype || 'image/webp'; // Auto-detect MIME type
+            photoBase64 = `data:${imageType};base64,${req.file.buffer.toString('base64')}`;
+        } else if (req.body.photo?.startsWith('data:image')) {
+            photoBase64 = req.body.photo; // Already in Base64 format
+        }
+
+        // Insert into database with Base64 directly
+        const [result] = await promisePool.execute(
+            'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
+            [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoBase64]
+        );
+
+        const newPost = {
+            _id: result.insertId,
+            message,
+            timestamp: new Date(),
+            username,
+            likes: 0,
+            dislikes: 0,
+            likedBy: [],
+            dislikedBy: [],
+            comments: [],
+            photo: photoBase64 // ✅ Now Base64 is directly stored and returned!
+        };
+
+        console.log("📸 New Post Created:", newPost);
+        return res.status(201).json(newPost);
+    } catch (error) {
+        console.error('❌ Error saving post:', error);
+        return res.status(500).json({ message: 'Error saving post', error });
     }
+}
+
 
     // ✅ **Handle PUT/PATCH Requests for Likes/Dislikes**
     if (req.method === 'PUT' || req.method === 'PATCH') {
