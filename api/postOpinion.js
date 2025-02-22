@@ -44,14 +44,16 @@ if (req.method === 'GET') {
             return res.status(404).json({ message: 'Post not found' });
         }
 
-        const imageBuffer = postRows[0].photo;
+        let base64Image = postRows[0].photo;
 
-        if (!imageBuffer || imageBuffer.length === 0) {
+        if (!base64Image) {
             return res.status(404).json({ message: 'No image found for this post' });
         }
 
-        // ✅ Fix: Properly Encode to Base64
-        const base64Image = `data:image/webp;base64,${Buffer.from(imageBuffer, 'binary').toString('base64')}`;
+        // ✅ Fix: Ensure the `data:image/...` prefix is correct
+        if (!base64Image.startsWith("data:image")) {
+            base64Image = `data:image/webp;base64,${base64Image}`;
+        }
 
         return res.status(200).json({ image: base64Image });
 
