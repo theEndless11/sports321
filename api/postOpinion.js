@@ -31,11 +31,14 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
         const { message, username, sessionId, photo } = req.body;
 
-        if (!message || message.trim() === '') {
-            return res.status(400).json({ message: 'Message cannot be empty' });
-        }
+        console.log('Received POST request with body:', req.body);  // Log the body data
+
         if (!username || !sessionId) {
             return res.status(400).json({ message: 'Username and sessionId are required' });
+        }
+
+        if (!message && !photo) {
+            return res.status(400).json({ message: 'Post content cannot be empty' });
         }
 
         try {
@@ -43,22 +46,24 @@ export default async function handler(req, res) {
 
             // If a photo is provided (either URL or base64 string), save it in the photo table
             if (photo) {
+                console.log('Processing photo data:', photo);  // Log photo data
                 // Insert the photo into the photo table
                 const [photoResult] = await promisePool.execute(
                     'INSERT INTO photos (photoData) VALUES (?)', [photo]
                 );
                 photoUrl = `/photos/${photoResult.insertId}`;  // Reference the photo URL
+                console.log('Saved photo and assigned URL:', photoUrl);  // Log the URL
             }
 
             // Insert the new post into MySQL, with the photo field holding the photo URL
             const [result] = await promisePool.execute(
                 'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
-                [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoUrl || null]
+                [message || '', username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoUrl || null]
             );
 
             const newPost = {
                 _id: result.insertId,  // MySQL auto-incremented ID
-                message,
+                message: message || '',  // Ensure empty message is allowed
                 timestamp: new Date(),
                 username,
                 likes: 0,
@@ -82,6 +87,8 @@ export default async function handler(req, res) {
             return res.status(500).json({ message: 'Error saving post', error });
         }
     }
+
+
 
     // PUT/PATCH: Handle likes/dislikes (same as before)
     if (req.method === 'PUT' || req.method === 'PATCH') {
