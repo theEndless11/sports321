@@ -30,7 +30,7 @@ const handler = async (req, res) => {
 
     setCorsHeaders(req, res);
 
-   if (req.method === 'GET') {
+  if (req.method === 'GET') {
     const { postId } = req.query;
 
     if (!postId) {
@@ -38,7 +38,7 @@ const handler = async (req, res) => {
     }
 
     try {
-        // Fetch image from the database
+        // Fetch the image from the database
         const [postRows] = await promisePool.execute('SELECT photo FROM posts WHERE _id = ?', [postId]);
 
         if (!postRows.length) {
@@ -47,21 +47,21 @@ const handler = async (req, res) => {
 
         const imageBuffer = postRows[0].photo;
 
-        if (!imageBuffer) {
+        if (!imageBuffer || imageBuffer.length === 0) {
             return res.status(404).json({ message: 'No image found for this post' });
         }
 
-        // Convert binary data to Base64
+        // **Fix: Convert Buffer to Proper Base64 Format**
         const base64Image = `data:image/webp;base64,${imageBuffer.toString('base64')}`;
 
-        // Send Base64 image back to the frontend
+        // **Send JSON Response with Properly Formatted Base64 Image**
         return res.status(200).json({ image: base64Image });
+
     } catch (error) {
         console.error('❌ Error retrieving image:', error);
         return res.status(500).json({ message: 'Error retrieving image', error });
     }
 }
-
 
     // ✅ **Handle POST Request to Create a New Post**
     if (req.method === 'POST') {
