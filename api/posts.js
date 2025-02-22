@@ -28,12 +28,15 @@ module.exports = async function handler(req, res) {
                 let photoUrl = null;
 
                 if (post.photo) {
-                    // If the photo is a valid URL, keep it as is
+                    // Ensure the photo is being parsed correctly
+                    // Detecting whether the photo is base64 or a URL
                     if (post.photo.startsWith('http')) {
-                        photoUrl = post.photo;
+                        photoUrl = post.photo; // If it's already a valid URL, use it
+                    } else if (post.photo.startsWith('data:image/')) {
+                        photoUrl = post.photo; // If it's already a base64 string, use it directly
                     } else {
-                        // If the photo is base64, store it as a data URI
-                        photoUrl = `data:image/webp;base64,${post.photo.toString('base64')}`;
+                        // Otherwise, assume it's base64 and prepend the correct data URL prefix
+                        photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
                     }
                 }
 
