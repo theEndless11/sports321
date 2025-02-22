@@ -4,8 +4,8 @@ const multer = require('multer');
 const { promisePool } = require('../utils/db');
 const { publishToAbly } = require('../utils/ably');
 
-// Use the 'uploads' directory instead of '/tmp/uploads'
-const uploadDir = './uploads';  // Path to the uploads folder
+// Use an absolute path for the 'uploads' directory
+const uploadDir = path.resolve(__dirname, '../uploads');  // Absolute path
 
 // Ensure the uploads directory exists
 if (!fs.existsSync(uploadDir)) {
@@ -158,3 +158,4 @@ module.exports = async function handler(req, res) {
 
     return res.status(405).json({ message: 'Method Not Allowed' });
 };
+
