@@ -30,34 +30,38 @@ const handler = async (req, res) => {
 
     setCorsHeaders(req, res);
 
-    // ✅ **Handle GET Request to Fetch Image**
-    if (req.method === 'GET') {
-        const { postId } = req.query;
+   if (req.method === 'GET') {
+    const { postId } = req.query;
 
-        if (!postId) {
-            return res.status(400).json({ message: 'Post ID is required' });
-        }
-
-        try {
-            const [postRows] = await promisePool.execute('SELECT photo FROM posts WHERE _id = ?', [postId]);
-
-            if (!postRows.length) {
-                return res.status(404).json({ message: 'Post not found' });
-            }
-
-            const imageBuffer = postRows[0].photo;
-
-            if (!imageBuffer) {
-                return res.status(404).json({ message: 'No image found for this post' });
-            }
-
-            res.setHeader('Content-Type', 'image/jpeg'); // Adjust based on image type
-            return res.send(imageBuffer);
-        } catch (error) {
-            console.error('Error retrieving image:', error);
-            return res.status(500).json({ message: 'Error retrieving image', error });
-        }
+    if (!postId) {
+        return res.status(400).json({ message: 'Post ID is required' });
     }
+
+    try {
+        // Fetch image from the database
+        const [postRows] = await promisePool.execute('SELECT photo FROM posts WHERE _id = ?', [postId]);
+
+        if (!postRows.length) {
+            return res.status(404).json({ message: 'Post not found' });
+        }
+
+        const imageBuffer = postRows[0].photo;
+
+        if (!imageBuffer) {
+            return res.status(404).json({ message: 'No image found for this post' });
+        }
+
+        // Convert binary data to Base64
+        const base64Image = `data:image/webp;base64,${imageBuffer.toString('base64')}`;
+
+        // Send Base64 image back to the frontend
+        return res.status(200).json({ image: base64Image });
+    } catch (error) {
+        console.error('❌ Error retrieving image:', error);
+        return res.status(500).json({ message: 'Error retrieving image', error });
+    }
+}
+
 
     // ✅ **Handle POST Request to Create a New Post**
     if (req.method === 'POST') {
