@@ -1,4 +1,4 @@
-import { promisePool } from '../utils/db'; // Use MySQL connection pool
+const { promisePool } = require('../utils/db'); // Use MySQL connection pool
 
 // Set CORS headers for all methods
 const setCorsHeaders = (res) => {
@@ -9,7 +9,7 @@ const setCorsHeaders = (res) => {
 };
 
 // Serverless API handler for getting posts
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     setCorsHeaders(res);
 
     // Handle pre-flight OPTIONS request
@@ -24,19 +24,33 @@ export default async function handler(req, res) {
             const [posts] = await promisePool.execute('SELECT * FROM posts ORDER BY timestamp DESC');
 
             // Map over the posts and parse necessary fields
-            const formattedPosts = posts.map(post => ({
-                _id: post._id,
-                message: post.message,
-                timestamp: post.timestamp,
-                username: post.username,
-                sessionId: post.sessionId,
-                likes: post.likes,
-                dislikes: post.dislikes,
-                likedBy: post.likedBy ? JSON.parse(post.likedBy) : [],
-                dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
-                comments: post.comments ? JSON.parse(post.comments) : [],
-                photo: post.photo ? (post.photo.startsWith('data:image') ? post.photo : `data:image/webp;base64,${post.photo.toString('base64')}`) : null
-            }));
+            const formattedPosts = posts.map(post => {
+                let photoUrl = null;
+
+                if (post.photo) {
+                    // If the photo is a valid URL, keep it as is
+                    if (post.photo.startsWith('http')) {
+                        photoUrl = post.photo;
+                    } else {
+                        // If the photo is base64, store it as a data URI
+                        photoUrl = `data:image/webp;base64,${post.photo.toString('base64')}`;
+                    }
+                }
+
+                return {
+                    _id: post._id,
+                    message: post.message,
+                    timestamp: post.timestamp,
+                    username: post.username,
+                    sessionId: post.sessionId,
+                    likes: post.likes,
+                    dislikes: post.dislikes,
+                    likedBy: post.likedBy ? JSON.parse(post.likedBy) : [],
+                    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
+                    comments: post.comments ? JSON.parse(post.comments) : [],
+                    photo: photoUrl // Add the formatted photo URL here
+                };
+            });
 
             res.status(200).json(formattedPosts);
         } catch (error) {
@@ -46,5 +60,5 @@ export default async function handler(req, res) {
     } else {
         res.status(405).json({ message: 'Method Not Allowed' });
     }
-}
+};
 
