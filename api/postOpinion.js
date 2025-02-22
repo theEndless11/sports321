@@ -16,12 +16,12 @@ const setCorsHeaders = (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
 };
 
-// Multer setup
+// Multer setup for handling images in memory
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 const uploadPhoto = upload.single('photo');
 
-// Main API handler
+// Main API handler (Handles POST, GET (image), PUT/PATCH)
 const handler = async (req, res) => {
     if (req.method === 'OPTIONS') {
         setCorsHeaders(req, res);
@@ -30,6 +30,36 @@ const handler = async (req, res) => {
 
     setCorsHeaders(req, res);
 
+    // 📌 **Handle GET request to retrieve images**
+    if (req.method === 'GET') {
+        const { postId } = req.query;
+
+        if (!postId) {
+            return res.status(400).json({ message: 'Post ID is required' });
+        }
+
+        try {
+            const [postRows] = await promisePool.execute('SELECT photo FROM posts WHERE _id = ?', [postId]);
+
+            if (!postRows.length) {
+                return res.status(404).json({ message: 'Post not found' });
+            }
+
+            const imageBuffer = postRows[0].photo;
+
+            if (!imageBuffer) {
+                return res.status(404).json({ message: 'No image found for this post' });
+            }
+
+            res.setHeader('Content-Type', 'image/webp'); // Adjust MIME type if necessary
+            return res.send(imageBuffer);
+        } catch (error) {
+            console.error('Error retrieving image:', error);
+            return res.status(500).json({ message: 'Error retrieving image', error });
+        }
+    }
+
+    // 📌 **Handle POST request to create new posts**
     if (req.method === 'POST') {
         try {
             await new Promise((resolve, reject) => {
@@ -59,19 +89,18 @@ const handler = async (req, res) => {
                 [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoBuffer]
             );
 
-         const newPost = {
-    _id: result.insertId,
-    message,
-    timestamp: new Date(),
-    username,
-    likes: 0,
-    dislikes: 0,
-    likedBy: [],
-    dislikedBy: [],
-    comments: [],
-    photo: photoBuffer ? `/api/getImage?postId=${result.insertId}` : null  // <-- FIXED
-};
-
+            const newPost = {
+                _id: result.insertId,
+                message,
+                timestamp: new Date(),
+                username,
+                likes: 0,
+                dislikes: 0,
+                likedBy: [],
+                dislikedBy: [],
+                comments: [],
+                photo: photoBuffer ? `/api/getImage?postId=${result.insertId}` : null
+            };
 
             await publishToAbly('newOpinion', newPost).catch((error) => console.error('Error publishing to Ably:', error));
 
@@ -82,6 +111,7 @@ const handler = async (req, res) => {
         }
     }
 
+    // 📌 **Handle PUT/PATCH requests for likes/dislikes**
     if (req.method === 'PUT' || req.method === 'PATCH') {
         const { postId, action, username } = req.body;
         if (!postId || !action || !username) return res.status(400).json({ message: 'Post ID, action, and username are required' });
@@ -137,32 +167,6 @@ const handler = async (req, res) => {
     return res.status(405).json({ message: 'Method Not Allowed' });
 };
 
-// Separate function for handling image retrieval
-const imageHandler = async (req, res) => {
-    const { postId } = req.query;
-
-    try {
-        const [postRows] = await promisePool.execute('SELECT photo FROM posts WHERE _id = ?', [postId]);
-
-        if (!postRows.length) {
-            return res.status(404).json({ message: 'Post not found' });
-        }
-
-        const imageBuffer = postRows[0].photo;
-
-        if (!imageBuffer) {
-            return res.status(404).json({ message: 'No image found for this post' });
-        }
-
-        res.setHeader('Content-Type', 'image/webp'); 
-        res.send(imageBuffer);
-    } catch (error) {
-        console.error('Error retrieving image:', error);
-        return res.status(500).json({ message: 'Error retrieving image', error });
-    }
-};
-
-// Corrected Export: Use `module.exports` with default function
+// ✅ **Export the merged handler**
 module.exports = handler;
-module.exports.imageHandler = imageHandler;
 
