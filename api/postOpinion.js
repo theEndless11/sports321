@@ -1,5 +1,5 @@
-import { promisePool } from '../utils/db';  // Corrected to use MySQL connection pool
-import { publishToAbly } from '../utils/ably';  // Assuming this remains the same
+const { promisePool } = require('../utils/db');  // Corrected to use MySQL connection pool
+const { publishToAbly } = require('../utils/ably');  // Assuming this remains the same
 
 // Set CORS headers
 const setCorsHeaders = (req, res) => {
@@ -19,7 +19,7 @@ const setCorsHeaders = (req, res) => {
 };
 
 // Handle post actions (creating, liking, disliking)
-export default async function handler(req, res) {
+const handler = async (req, res) => {
     if (req.method === 'OPTIONS') {
         setCorsHeaders(req, res);
         return res.status(200).end();
@@ -83,7 +83,6 @@ export default async function handler(req, res) {
             return res.status(500).json({ message: 'Error saving post', error });
         }
     }
-}
 
     // PUT/PATCH: Handle likes/dislikes (same as before)
     if (req.method === 'PUT' || req.method === 'PATCH') {
@@ -164,6 +163,6 @@ export default async function handler(req, res) {
 
     // Handle other methods
     return res.status(405).json({ message: 'Method Not Allowed' });
-}
+};
 
 module.exports = handler;
