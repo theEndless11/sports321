@@ -91,19 +91,19 @@ const handler = async (req, res) => {
             'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
             [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoBuffer]
         );
-
-        const newPost = {
-            _id: result.insertId,
-            message,
-            timestamp: new Date(),
-            username,
-            likes: 0,
-            dislikes: 0,
-            likedBy: [],
-            dislikedBy: [],
-            comments: [],
-            photo: photoUrl
-        };
+const newPost = {
+    _id: result.insertId,
+    message,
+    timestamp: new Date(),
+    username,
+    likes: 0,
+    dislikes: 0,
+    likedBy: [],
+    dislikedBy: [],
+    comments: [],
+    // Store the actual base64 URL if photoBuffer exists
+    photo: photoBuffer ? `data:image/jpeg;base64,${photoBuffer.toString('base64')}` : null
+};
 
         console.log("📸 New Post Created:", newPost);
         return res.status(201).json(newPost);
