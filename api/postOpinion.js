@@ -30,61 +30,69 @@ const handler = async (req, res) => {
 
     setCorsHeaders(req, res);
 
-    // 📌 **Handle POST request for creating a new post with a photo**
-    if (req.method === 'POST') {
-        try {
-            // Handle file upload using multer
-            await new Promise((resolve, reject) => {
-                uploadPhoto(req, res, (err) => {
-                    if (err) reject({ message: 'Error uploading photo', error: err });
-                    else resolve();
-                });
+  // Corrected portion of your POST handler
+
+if (req.method === 'POST') {
+    try {
+        // Handle file upload using multer
+        await new Promise((resolve, reject) => {
+            uploadPhoto(req, res, (err) => {
+                if (err) reject({ message: 'Error uploading photo', error: err });
+                else resolve();
             });
+        });
 
-            const { message, username, sessionId } = req.body;
-            if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
+        const { message, username, sessionId } = req.body;
+        if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
 
-            if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
-                return res.status(400).json({ message: 'Message or photo is required' });
-            }
-
-            let photoUrl = null;
-
-            if (req.file) {
-                // Store the photo URL in the database (assuming external URL or cloud storage)
-                photoUrl = `https://sports321.vercel.app/api/postOpinion?postId=${result.insertId}`;
-            } else if (req.body.photo?.startsWith('data:image')) {
-                // If base64 image, we will save it as a base64 encoded string.
-                const matches = req.body.photo.match(/^data:image\/([a-zA-Z]*);base64,([^\"]*)/);
-                photoUrl = `data:image/jpeg;base64,${matches[2]}`;
-            }
-
-            const [result] = await promisePool.execute(
-                'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
-                [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoUrl]
-            );
-
-            const newPost = {
-                _id: result.insertId,
-                message,
-                timestamp: new Date(),
-                username,
-                likes: 0,
-                dislikes: 0,
-                likedBy: [],
-                dislikedBy: [],
-                comments: [],
-                photo: photoUrl // Save photo URL (either external or base64) here
-            };
-
-            console.log("📸 New Post Created:", newPost);
-
-            return res.status(201).json(newPost);
-        } catch (error) {
-            console.error('Error saving post:', error);
-            return res.status(500).json({ message: 'Error saving post', error });
+        if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
+            return res.status(400).json({ message: 'Message or photo is required' });
         }
+
+        let photoUrl = null;
+
+        // Perform the insert into the database first
+        const [result] = await promisePool.execute(
+            'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
+            [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoUrl]
+        );
+
+        // Now, we can access the `result` object
+        if (req.file) {
+            // If the file is uploaded, set the photo URL after inserting into the database
+            photoUrl = `https://sports321.vercel.app/api/postOpinion?postId=${result.insertId}`;
+        } else if (req.body.photo?.startsWith('data:image')) {
+            // If base64 encoded image is provided, store as base64 URL
+            const matches = req.body.photo.match(/^data:image\/([a-zA-Z]*);base64,([^\"]*)/);
+            photoUrl = `data:image/jpeg;base64,${matches[2]}`;
+        }
+
+        // Update the post with the correct photo URL (after inserting it)
+        await promisePool.execute(
+            'UPDATE posts SET photo = ? WHERE _id = ?',
+            [photoUrl, result.insertId]
+        );
+
+        const newPost = {
+            _id: result.insertId,
+            message,
+            timestamp: new Date(),
+            username,
+            likes: 0,
+            dislikes: 0,
+            likedBy: [],
+            dislikedBy: [],
+            comments: [],
+            photo: photoUrl
+        };
+
+        console.log("📸 New Post Created:", newPost);
+        return res.status(201).json(newPost);
+    } catch (error) {
+        console.error('Error saving post:', error);
+        return res.status(500).json({ message: 'Error saving post', error });
     }
+}
 
     // 📌 **Handle PUT/PATCH requests for likes/dislikes**
     if (req.method === 'PUT' || req.method === 'PATCH') {
