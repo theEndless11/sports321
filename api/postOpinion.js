@@ -44,15 +44,11 @@ export default async function handler(req, res) {
         try {
             let photoUrl = null;
 
-            // If a photo is provided (either URL or base64 string), save it in the photo table
+            // If a photo is provided (either URL or base64 string), save it in the photo column of posts table
             if (photo) {
                 console.log('Processing photo data:', photo);  // Log photo data
-                // Insert the photo into the photo table
-                const [photoResult] = await promisePool.execute(
-                    'INSERT INTO photos (photoData) VALUES (?)', [photo]
-                );
-                photoUrl = `/photos/${photoResult.insertId}`;  // Reference the photo URL
-                console.log('Saved photo and assigned URL:', photoUrl);  // Log the URL
+                // If you want to store the photo directly in posts, just save the photo URL
+                photoUrl = photo;  // Just use the photo URL or base64 string
             }
 
             // Insert the new post into MySQL, with the photo field holding the photo URL
@@ -87,8 +83,7 @@ export default async function handler(req, res) {
             return res.status(500).json({ message: 'Error saving post', error });
         }
     }
-
-
+}
 
     // PUT/PATCH: Handle likes/dislikes (same as before)
     if (req.method === 'PUT' || req.method === 'PATCH') {
@@ -151,8 +146,7 @@ export default async function handler(req, res) {
                 username: post.username,
                 likes: updatedLikes,
                 dislikes: updatedDislikes,
-                comments: JSON.parse(post.comments),
-                photo: post.photo  // Include the photo URL or base64 string
+                comments: JSON.parse(post.comments)
             };
 
             try {
