@@ -18,9 +18,9 @@ const setCorsHeaders = (req, res) => {
 
 const storage = multer.memoryStorage(); // Use memoryStorage to keep the image in memory
 const upload = multer({ storage });
-const uploadPhoto = upload.single('photo');  // Use 'photo' as the field name
+const uploadPhoto = upload.single('photo'); // Use 'photo' as the field name
 
-module.exports = async function handler(req, res) {
+const handler = async (req, res) => {
     if (req.method === 'OPTIONS') {
         setCorsHeaders(req, res);
         return res.status(200).end();
@@ -43,27 +43,21 @@ module.exports = async function handler(req, res) {
 
             const { message, username, sessionId } = req.body;
 
-            // Adjust the validation to allow empty message if photo is present
             if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
 
-            // Only check for message if there's no photo
             if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
                 return res.status(400).json({ message: 'Message or photo is required' });
             }
 
-            // Process the uploaded photo
             let photoBuffer = null;
             if (req.file) {
-                // If a photo is uploaded, convert it to a Buffer
                 photoBuffer = req.file.buffer;
             } else if (req.body.photo?.startsWith('data:image')) {
-                // If the photo is passed as base64, convert it to a Buffer
                 const matches = req.body.photo.match(/^data:image\/([a-zA-Z]*);base64,([^\"]*)/);
                 const imgBuffer = Buffer.from(matches[2], 'base64');
                 photoBuffer = imgBuffer;
             }
 
-            // Insert the new post into MySQL with or without a photo
             const [result] = await promisePool.execute(
                 'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
                 [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoBuffer]
@@ -79,10 +73,9 @@ module.exports = async function handler(req, res) {
                 likedBy: [],
                 dislikedBy: [],
                 comments: [],
-                photo: photoBuffer ? 'Image stored in database' : null  // Indicate that the image is stored in DB
+                photo: photoBuffer ? 'Image stored in database' : null
             };
 
-            // Publish the new post to Ably
             await publishToAbly('newOpinion', newPost).catch((error) => console.error('Error publishing to Ably:', error));
 
             return res.status(201).json(newPost);
@@ -91,35 +84,12 @@ module.exports = async function handler(req, res) {
             return res.status(500).json({ message: 'Error saving post', error });
         }
     }
-    module.exports = async function imageHandler(req, res) {
-    const { postId } = req.query;  // Assuming the image is tied to a postId
 
-    try {
-        const [postRows] = await promisePool.execute('SELECT photo FROM posts WHERE _id = ?', [postId]);
-
-        if (!postRows.length) {
-            return res.status(404).json({ message: 'Post not found' });
-        }
-
-        const imageBuffer = postRows[0].photo;
-
-        if (!imageBuffer) {
-            return res.status(404).json({ message: 'No image found for this post' });
-        }
-
-        res.setHeader('Content-Type', 'image/webp');  // Adjust MIME type as needed (e.g., PNG, JPEG)
-        res.send(imageBuffer);  // Send the image buffer directly
-
-    } catch (error) {
-        console.error('Error retrieving image:', error);
-        return res.status(500).json({ message: 'Error retrieving image', error });
-    }
     if (req.method === 'PUT' || req.method === 'PATCH') {
         const { postId, action, username } = req.body;
         if (!postId || !action || !username) return res.status(400).json({ message: 'Post ID, action, and username are required' });
 
         try {
-            // This part should be inside an async function (already inside async handler)
             const [postRows] = await promisePool.execute('SELECT * FROM posts WHERE _id = ?', [postId]);
             const post = postRows[0];
             if (!post) return res.status(404).json({ message: 'Post not found' });
@@ -169,4 +139,31 @@ module.exports = async function handler(req, res) {
 
     return res.status(405).json({ message: 'Method Not Allowed' });
 };
+
+// Separate function for handling image retrieval
+const imageHandler = async (req, res) => {
+    const { postId } = req.query;
+
+    try {
+        const [postRows] = await promisePool.execute('SELECT photo FROM posts WHERE _id = ?', [postId]);
+
+        if (!postRows.length) {
+            return res.status(404).json({ message: 'Post not found' });
+        }
+
+        const imageBuffer = postRows[0].photo;
+
+        if (!imageBuffer) {
+            return res.status(404).json({ message: 'No image found for this post' });
+        }
+
+        res.setHeader('Content-Type', 'image/webp'); 
+        res.send(imageBuffer);
+    } catch (error) {
+        console.error('Error retrieving image:', error);
+        return res.status(500).json({ message: 'Error retrieving image', error });
+    }
+};
+
+module.exports = { handler, imageHandler };
 
