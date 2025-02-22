@@ -59,61 +59,59 @@ const handler = async (req, res) => {
         }
     }
 
-    // 📌 **Handle POST request to create new posts**
-    if (req.method === 'POST') {
-        try {
-            await new Promise((resolve, reject) => {
-                uploadPhoto(req, res, (err) => {
-                    if (err) reject({ message: 'Error uploading photo', error: err });
-                    else resolve();
-                });
+   if (req.method === 'POST') {
+    try {
+        await new Promise((resolve, reject) => {
+            uploadPhoto(req, res, (err) => {
+                if (err) reject({ message: 'Error uploading photo', error: err });
+                else resolve();
             });
+        });
 
-            const { message, username, sessionId } = req.body;
-            if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
+        const { message, username, sessionId } = req.body;
+        if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
 
-            if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
-                return res.status(400).json({ message: 'Message or photo is required' });
-            }
-
-            let photoBuffer = null;
-            if (req.file) {
-                photoBuffer = req.file.buffer;
-            } else if (req.body.photo?.startsWith('data:image')) {
-                const matches = req.body.photo.match(/^data:image\/([a-zA-Z]*);base64,([^\"]*)/);
-                photoBuffer = Buffer.from(matches[2], 'base64');
-            }
-
-            const [result] = await promisePool.execute(
-                'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
-                [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoBuffer]
-            );
-
-          const newPost = {
-    _id: result.insertId,
-    message,
-    timestamp: new Date(),
-    username,
-    likes: 0,
-    dislikes: 0,
-    likedBy: [],
-    dislikedBy: [],
-    comments: [],
-    photo: photoBuffer ? `https://sports321.vercel.app/api/postOpinion?postId=${result.insertId}` : null
-};
-
-console.log("📸 New Post Created:", newPost);  // Debugging the photo URL
-return res.status(201).json(newPost);
-
-
-            await publishToAbly('newOpinion', newPost).catch((error) => console.error('Error publishing to Ably:', error));
-
-            return res.status(201).json(newPost);
-        } catch (error) {
-            console.error('Error saving post:', error);
-            return res.status(500).json({ message: 'Error saving post', error });
+        if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
+            return res.status(400).json({ message: 'Message or photo is required' });
         }
+
+        let photoBuffer = null;
+        let photoUrl = null;
+
+        if (req.file) {
+            photoBuffer = req.file.buffer;
+            photoUrl = `https://sports321.vercel.app/api/postOpinion?postId=${result.insertId}`;
+        } else if (req.body.photo?.startsWith('data:image')) {
+            const matches = req.body.photo.match(/^data:image\/([a-zA-Z]*);base64,([^\"]*)/);
+            photoBuffer = Buffer.from(matches[2], 'base64');
+            photoUrl = `https://sports321.vercel.app/api/postOpinion?postId=${result.insertId}`;
+        }
+
+        const [result] = await promisePool.execute(
+            'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
+            [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoBuffer]
+        );
+
+        const newPost = {
+            _id: result.insertId,
+            message,
+            timestamp: new Date(),
+            username,
+            likes: 0,
+            dislikes: 0,
+            likedBy: [],
+            dislikedBy: [],
+            comments: [],
+            photo: photoUrl
+        };
+
+        console.log("📸 New Post Created:", newPost);
+        return res.status(201).json(newPost);
+    } catch (error) {
+        console.error('Error saving post:', error);
+        return res.status(500).json({ message: 'Error saving post', error });
     }
+}
 
     // 📌 **Handle PUT/PATCH requests for likes/dislikes**
     if (req.method === 'PUT' || req.method === 'PATCH') {
