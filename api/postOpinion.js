@@ -4,25 +4,25 @@ const multer = require('multer');
 const { promisePool } = require('../utils/db');
 const { publishToAbly } = require('../utils/ably');
 
-// Use Vercel's /tmp directory for temporary uploads
-const uploadDir = '/tmp/uploads'; // Vercel only supports /tmp for file storage
+// Use the 'uploads' directory instead of '/tmp/uploads'
+const uploadDir = './uploads';  // Path to the uploads folder
 
-// Ensure the uploads directory exists in /tmp
+// Ensure the uploads directory exists
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
-    console.log('Uploads directory created in /tmp');
+    console.log('Uploads directory created');
 }
 
-// Set up storage for photo uploads (store in '/tmp/uploads' folder)
+// Set up storage for photo uploads (store in 'uploads' folder)
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        console.log(`Using Vercel's temporary upload path: ${uploadDir}`);
-        cb(null, uploadDir); // Store files in /tmp/uploads
+        console.log(`Using uploads directory for storing files: ${uploadDir}`);
+        cb(null, uploadDir);  // Store files in 'uploads' folder
     },
     filename: (req, file, cb) => {
         const filename = `${Date.now()}${path.extname(file.originalname)}`;
         console.log(`Saving file as: ${filename}`);
-        cb(null, filename);
+        cb(null, filename);  // Save the file with a unique name
     }
 });
 
@@ -61,19 +61,18 @@ module.exports = async function handler(req, res) {
                 });
             });
 
-          const { message, username, sessionId } = req.body;
+            const { message, username, sessionId } = req.body;
 
-// Adjust the validation to allow empty message if photo is present
-if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
+            // Adjust the validation to allow empty message if photo is present
+            if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
 
-// Only check for message if there's no photo
-if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
-    return res.status(400).json({ message: 'Message or photo is required' });
-}
+            // Only check for message if there's no photo
+            if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
+                return res.status(400).json({ message: 'Message or photo is required' });
+            }
 
-
-            // Determine the file path for the uploaded photo
-            let photoPath = req.file ? `/tmp/uploads/${req.file.filename}` : req.body.photo?.startsWith('data:image') ? req.body.photo : null;
+            // Determine the file path for the uploaded photo (now in 'uploads' directory)
+            let photoPath = req.file ? `/uploads/${req.file.filename}` : req.body.photo?.startsWith('data:image') ? req.body.photo : null;
 
             // Insert the new post into MySQL with or without a photo
             const [result] = await promisePool.execute(
@@ -103,6 +102,7 @@ if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
             return res.status(500).json({ message: 'Error saving post', error });
         }
     }
+};
 
     if (req.method === 'PUT' || req.method === 'PATCH') {
         const { postId, action, username } = req.body;
