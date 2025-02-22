@@ -61,10 +61,16 @@ module.exports = async function handler(req, res) {
                 });
             });
 
-            const { message, username, sessionId } = req.body;
+          const { message, username, sessionId } = req.body;
 
-            if (!message || !message.trim()) return res.status(400).json({ message: 'Message cannot be empty' });
-            if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
+// Adjust the validation to allow empty message if photo is present
+if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
+
+// Only check for message if there's no photo
+if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
+    return res.status(400).json({ message: 'Message or photo is required' });
+}
+
 
             // Determine the file path for the uploaded photo
             let photoPath = req.file ? `/tmp/uploads/${req.file.filename}` : req.body.photo?.startsWith('data:image') ? req.body.photo : null;
