@@ -5,7 +5,7 @@ const { promisePool } = require('../utils/db');
 const { publishToAbly } = require('../utils/ably');
 const crypto = require('crypto');
 
-// Set CORS headers for API requests
+// Set CORS headers
 const setCorsHeaders = (req, res) => {
     const allowedOrigins = ['https://latestnewsandaffairs.site'];
     const origin = req.headers.origin;
@@ -16,10 +16,12 @@ const setCorsHeaders = (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
 };
 
-const storage = multer.memoryStorage(); // Use memoryStorage to keep the image in memory
+// Multer setup
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
-const uploadPhoto = upload.single('photo'); // Use 'photo' as the field name
+const uploadPhoto = upload.single('photo');
 
+// Main API handler
 const handler = async (req, res) => {
     if (req.method === 'OPTIONS') {
         setCorsHeaders(req, res);
@@ -30,19 +32,14 @@ const handler = async (req, res) => {
 
     if (req.method === 'POST') {
         try {
-            // Wait for the file upload to complete
             await new Promise((resolve, reject) => {
                 uploadPhoto(req, res, (err) => {
-                    if (err) {
-                        reject({ message: 'Error uploading photo', error: err });
-                    } else {
-                        resolve();
-                    }
+                    if (err) reject({ message: 'Error uploading photo', error: err });
+                    else resolve();
                 });
             });
 
             const { message, username, sessionId } = req.body;
-
             if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
 
             if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
@@ -54,8 +51,7 @@ const handler = async (req, res) => {
                 photoBuffer = req.file.buffer;
             } else if (req.body.photo?.startsWith('data:image')) {
                 const matches = req.body.photo.match(/^data:image\/([a-zA-Z]*);base64,([^\"]*)/);
-                const imgBuffer = Buffer.from(matches[2], 'base64');
-                photoBuffer = imgBuffer;
+                photoBuffer = Buffer.from(matches[2], 'base64');
             }
 
             const [result] = await promisePool.execute(
@@ -165,5 +161,7 @@ const imageHandler = async (req, res) => {
     }
 };
 
-module.exports = { handler, imageHandler };
+// Corrected Export: Use `module.exports` with default function
+module.exports = handler;
+module.exports.imageHandler = imageHandler;
 
