@@ -30,88 +30,61 @@ const handler = async (req, res) => {
 
     setCorsHeaders(req, res);
 
-    // 📌 **Handle GET request to retrieve images**
-    if (req.method === 'GET') {
-        const { postId } = req.query;
-
-        if (!postId) {
-            return res.status(400).json({ message: 'Post ID is required' });
-        }
-
+    // 📌 **Handle POST request for creating a new post with a photo**
+    if (req.method === 'POST') {
         try {
-            const [postRows] = await promisePool.execute('SELECT photo FROM posts WHERE _id = ?', [postId]);
-
-            if (!postRows.length) {
-                return res.status(404).json({ message: 'Post not found' });
-            }
-
-            const imageBuffer = postRows[0].photo;
-
-            if (!imageBuffer) {
-                return res.status(404).json({ message: 'No image found for this post' });
-            }
-
-            res.setHeader('Content-Type', 'image/webp'); // Adjust MIME type if necessary
-            return res.send(imageBuffer);
-        } catch (error) {
-            console.error('Error retrieving image:', error);
-            return res.status(500).json({ message: 'Error retrieving image', error });
-        }
-    }
-
-   if (req.method === 'POST') {
-    try {
-        await new Promise((resolve, reject) => {
-            uploadPhoto(req, res, (err) => {
-                if (err) reject({ message: 'Error uploading photo', error: err });
-                else resolve();
+            // Handle file upload using multer
+            await new Promise((resolve, reject) => {
+                uploadPhoto(req, res, (err) => {
+                    if (err) reject({ message: 'Error uploading photo', error: err });
+                    else resolve();
+                });
             });
-        });
 
-        const { message, username, sessionId } = req.body;
-        if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
+            const { message, username, sessionId } = req.body;
+            if (!username || !sessionId) return res.status(400).json({ message: 'Username and sessionId are required' });
 
-        if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
-            return res.status(400).json({ message: 'Message or photo is required' });
+            if (!message && !req.file && !req.body.photo?.startsWith('data:image')) {
+                return res.status(400).json({ message: 'Message or photo is required' });
+            }
+
+            let photoUrl = null;
+
+            if (req.file) {
+                // Store the photo URL in the database (assuming external URL or cloud storage)
+                photoUrl = `https://sports321.vercel.app/api/postOpinion?postId=${result.insertId}`;
+            } else if (req.body.photo?.startsWith('data:image')) {
+                // If base64 image, we will save it as a base64 encoded string.
+                const matches = req.body.photo.match(/^data:image\/([a-zA-Z]*);base64,([^\"]*)/);
+                photoUrl = `data:image/jpeg;base64,${matches[2]}`;
+            }
+
+            const [result] = await promisePool.execute(
+                'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
+                [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoUrl]
+            );
+
+            const newPost = {
+                _id: result.insertId,
+                message,
+                timestamp: new Date(),
+                username,
+                likes: 0,
+                dislikes: 0,
+                likedBy: [],
+                dislikedBy: [],
+                comments: [],
+                photo: photoUrl // Save photo URL (either external or base64) here
+            };
+
+            console.log("📸 New Post Created:", newPost);
+
+            return res.status(201).json(newPost);
+        } catch (error) {
+            console.error('Error saving post:', error);
+            return res.status(500).json({ message: 'Error saving post', error });
         }
-
-        let photoBuffer = null;
-        let photoUrl = null;
-
-        if (req.file) {
-            photoBuffer = req.file.buffer;
-            photoUrl = `https://sports321.vercel.app/api/postOpinion?postId=${result.insertId}`;
-        } else if (req.body.photo?.startsWith('data:image')) {
-            const matches = req.body.photo.match(/^data:image\/([a-zA-Z]*);base64,([^\"]*)/);
-            photoBuffer = Buffer.from(matches[2], 'base64');
-            photoUrl = `https://sports321.vercel.app/api/postOpinion?postId=${result.insertId}`;
-        }
-
-        const [result] = await promisePool.execute(
-            'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
-            [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoBuffer]
-        );
-const newPost = {
-    _id: result.insertId,
-    message,
-    timestamp: new Date(),
-    username,
-    likes: 0,
-    dislikes: 0,
-    likedBy: [],
-    dislikedBy: [],
-    comments: [],
-    // Store the actual base64 URL if photoBuffer exists
-    photo: photoBuffer ? `data:image/jpeg;base64,${photoBuffer.toString('base64')}` : null
-};
-
-        console.log("📸 New Post Created:", newPost);
-        return res.status(201).json(newPost);
-    } catch (error) {
-        console.error('Error saving post:', error);
-        return res.status(500).json({ message: 'Error saving post', error });
     }
-}
 
     // 📌 **Handle PUT/PATCH requests for likes/dislikes**
     if (req.method === 'PUT' || req.method === 'PATCH') {
@@ -154,7 +127,8 @@ const newPost = {
                 username: post.username,
                 likes: updatedLikes,
                 dislikes: updatedDislikes,
-                comments: JSON.parse(post.comments)
+                comments: JSON.parse(post.comments),
+                photo: post.photo // Reflect photo URL here
             };
 
             await publishToAbly('updateOpinion', updatedPost).catch((error) => console.error('Error publishing to Ably:', error));
