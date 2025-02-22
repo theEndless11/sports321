@@ -102,13 +102,13 @@ module.exports = async function handler(req, res) {
             return res.status(500).json({ message: 'Error saving post', error });
         }
     }
-};
 
     if (req.method === 'PUT' || req.method === 'PATCH') {
         const { postId, action, username } = req.body;
         if (!postId || !action || !username) return res.status(400).json({ message: 'Post ID, action, and username are required' });
 
         try {
+            // This part should be inside an async function (already inside async handler)
             const [postRows] = await promisePool.execute('SELECT * FROM posts WHERE _id = ?', [postId]);
             const post = postRows[0];
             if (!post) return res.status(404).json({ message: 'Post not found' });
@@ -157,4 +157,4 @@ module.exports = async function handler(req, res) {
     }
 
     return res.status(405).json({ message: 'Method Not Allowed' });
-}
+};
