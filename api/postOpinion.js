@@ -89,18 +89,22 @@ const handler = async (req, res) => {
                 [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoBuffer]
             );
 
-            const newPost = {
-                _id: result.insertId,
-                message,
-                timestamp: new Date(),
-                username,
-                likes: 0,
-                dislikes: 0,
-                likedBy: [],
-                dislikedBy: [],
-                comments: [],
-                photo: photoBuffer ? `/api/getImage?postId=${result.insertId}` : null
-            };
+           const newPost = {
+    _id: result.insertId,
+    message,
+    timestamp: new Date(),
+    username,
+    likes: 0,
+    dislikes: 0,
+    likedBy: [],
+    dislikedBy: [],
+    comments: [],
+    photo: photoBuffer ? `https://sports321.vercel.app/api/postOpinion?postId=${result.insertId}` : null
+};
+
+console.log("📸 New Post Created:", newPost);  // ✅ Debugging API response
+
+return res.status(201).json(newPost);
 
             await publishToAbly('newOpinion', newPost).catch((error) => console.error('Error publishing to Ably:', error));
 
