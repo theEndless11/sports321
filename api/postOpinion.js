@@ -91,8 +91,29 @@ module.exports = async function handler(req, res) {
             return res.status(500).json({ message: 'Error saving post', error });
         }
     }
+    module.exports = async function imageHandler(req, res) {
+    const { postId } = req.query;  // Assuming the image is tied to a postId
 
+    try {
+        const [postRows] = await promisePool.execute('SELECT photo FROM posts WHERE _id = ?', [postId]);
 
+        if (!postRows.length) {
+            return res.status(404).json({ message: 'Post not found' });
+        }
+
+        const imageBuffer = postRows[0].photo;
+
+        if (!imageBuffer) {
+            return res.status(404).json({ message: 'No image found for this post' });
+        }
+
+        res.setHeader('Content-Type', 'image/webp');  // Adjust MIME type as needed (e.g., PNG, JPEG)
+        res.send(imageBuffer);  // Send the image buffer directly
+
+    } catch (error) {
+        console.error('Error retrieving image:', error);
+        return res.status(500).json({ message: 'Error retrieving image', error });
+    }
     if (req.method === 'PUT' || req.method === 'PATCH') {
         const { postId, action, username } = req.body;
         if (!postId || !action || !username) return res.status(400).json({ message: 'Post ID, action, and username are required' });
