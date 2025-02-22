@@ -3,31 +3,7 @@ const path = require('path');
 const multer = require('multer');
 const { promisePool } = require('../utils/db');
 const { publishToAbly } = require('../utils/ably');
-
-// Use an absolute path for the 'uploads' directory
-const uploadDir = path.resolve(__dirname, '../uploads');  // Absolute path
-
-// Ensure the uploads directory exists
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-    console.log('Uploads directory created');
-}
-
-// Set up storage for photo uploads (store in 'uploads' folder)
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        console.log(`Using uploads directory for storing files: ${uploadDir}`);
-        cb(null, uploadDir);  // Store files in 'uploads' folder
-    },
-    filename: (req, file, cb) => {
-        const filename = `${Date.now()}${path.extname(file.originalname)}`;
-        console.log(`Saving file as: ${filename}`);
-        cb(null, filename);  // Save the file with a unique name
-    }
-});
-
-const upload = multer({ storage });
-const uploadPhoto = upload.single('photo');
+const crypto = require('crypto');
 
 // Set CORS headers for API requests
 const setCorsHeaders = (req, res) => {
@@ -39,6 +15,10 @@ const setCorsHeaders = (req, res) => {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Cache-Control', 'no-cache');
 };
+
+const storage = multer.memoryStorage(); // Use memoryStorage to keep the image in memory
+const upload = multer({ storage });
+const uploadPhoto = upload.single('photo');  // Use 'photo' as the field name
 
 module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') {
@@ -71,13 +51,22 @@ module.exports = async function handler(req, res) {
                 return res.status(400).json({ message: 'Message or photo is required' });
             }
 
-            // Determine the file path for the uploaded photo (now in 'uploads' directory)
-            let photoPath = req.file ? `/uploads/${req.file.filename}` : req.body.photo?.startsWith('data:image') ? req.body.photo : null;
+            // Process the uploaded photo
+            let photoBuffer = null;
+            if (req.file) {
+                // If a photo is uploaded, convert it to a Buffer
+                photoBuffer = req.file.buffer;
+            } else if (req.body.photo?.startsWith('data:image')) {
+                // If the photo is passed as base64, convert it to a Buffer
+                const matches = req.body.photo.match(/^data:image\/([a-zA-Z]*);base64,([^\"]*)/);
+                const imgBuffer = Buffer.from(matches[2], 'base64');
+                photoBuffer = imgBuffer;
+            }
 
             // Insert the new post into MySQL with or without a photo
             const [result] = await promisePool.execute(
                 'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
-                [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoPath]
+                [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoBuffer]
             );
 
             const newPost = {
@@ -90,7 +79,7 @@ module.exports = async function handler(req, res) {
                 likedBy: [],
                 dislikedBy: [],
                 comments: [],
-                photo: photoPath
+                photo: photoBuffer ? 'Image stored in database' : null  // Indicate that the image is stored in DB
             };
 
             // Publish the new post to Ably
@@ -102,6 +91,7 @@ module.exports = async function handler(req, res) {
             return res.status(500).json({ message: 'Error saving post', error });
         }
     }
+
 
     if (req.method === 'PUT' || req.method === 'PATCH') {
         const { postId, action, username } = req.body;
