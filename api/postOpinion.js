@@ -44,11 +44,14 @@ if (req.method === 'GET') {
             return res.status(404).json({ message: 'Post not found' });
         }
 
-        const base64Image = postRows[0].photo;
+        const imageBuffer = postRows[0].photo;
 
-        if (!base64Image) {
+        if (!imageBuffer || imageBuffer.length === 0) {
             return res.status(404).json({ message: 'No image found for this post' });
         }
+
+        // ✅ Fix: Properly Encode to Base64
+        const base64Image = `data:image/webp;base64,${Buffer.from(imageBuffer, 'binary').toString('base64')}`;
 
         return res.status(200).json({ image: base64Image });
 
@@ -58,8 +61,7 @@ if (req.method === 'GET') {
     }
 }
 
-
-    if (req.method === 'POST') {
+if (req.method === 'POST') {
     try {
         await new Promise((resolve, reject) => {
             uploadPhoto(req, res, (err) => {
@@ -78,14 +80,13 @@ if (req.method === 'GET') {
         let photoBase64 = null;
 
         if (req.file) {
-            // Convert image to Base64
-            const imageType = req.file.mimetype || 'image/webp'; // Auto-detect MIME type
+            // ✅ Fix: Properly Convert to Base64
+            const imageType = req.file.mimetype || 'image/webp'; 
             photoBase64 = `data:${imageType};base64,${req.file.buffer.toString('base64')}`;
         } else if (req.body.photo?.startsWith('data:image')) {
-            photoBase64 = req.body.photo; // Already in Base64 format
+            photoBase64 = req.body.photo;
         }
 
-        // Insert into database with Base64 directly
         const [result] = await promisePool.execute(
             'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
             [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoBase64]
@@ -101,7 +102,7 @@ if (req.method === 'GET') {
             likedBy: [],
             dislikedBy: [],
             comments: [],
-            photo: photoBase64 // ✅ Now Base64 is directly stored and returned!
+            photo: photoBase64
         };
 
         console.log("📸 New Post Created:", newPost);
@@ -111,6 +112,7 @@ if (req.method === 'GET') {
         return res.status(500).json({ message: 'Error saving post', error });
     }
 }
+
 
 
     // ✅ **Handle PUT/PATCH Requests for Likes/Dislikes**
