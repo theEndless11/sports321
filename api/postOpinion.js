@@ -1,22 +1,5 @@
 import { promisePool } from '../utils/db';  // Corrected to use MySQL connection pool
 import { publishToAbly } from '../utils/ably';  // Assuming this remains the same
-import multer from 'multer';
-import path from 'path';
-
-// Set up Multer for photo uploads (store in 'uploads' folder)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, './uploads/');  // Folder where photos will be saved
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));  // Unique file name
-  }
-});
-
-const upload = multer({ storage: storage });
-
-// Middleware for handling photo uploads in POST request
-const uploadPhoto = upload.single('photo');
 
 // Set CORS headers
 const setCorsHeaders = (req, res) => {
@@ -46,7 +29,7 @@ export default async function handler(req, res) {
 
     // POST: Create new post
     if (req.method === 'POST') {
-        const { message, username, sessionId } = req.body;
+        const { message, username, sessionId, photo } = req.body;
 
         if (!message || message.trim() === '') {
             return res.status(400).json({ message: 'Message cannot be empty' });
@@ -56,21 +39,21 @@ export default async function handler(req, res) {
         }
 
         try {
-            // Upload photo if provided in the request
-            let photoPath = null;
+            let photoUrl = null;
 
-            // Check if the request has a file (from the photo upload)
-            if (req.file) {
-                photoPath = `/uploads/${req.file.filename}`;  // Save file path
-            } else if (req.body.photo && req.body.photo.startsWith('data:image')) {
-                // Check if the photo is sent as base64 data
-                photoPath = req.body.photo;  // Save base64 string
+            // If a photo is provided (either URL or base64 string), save it in the photo table
+            if (photo) {
+                // Insert the photo into the photo table
+                const [photoResult] = await promisePool.execute(
+                    'INSERT INTO photos (photoData) VALUES (?)', [photo]
+                );
+                photoUrl = `/photos/${photoResult.insertId}`;  // Reference the photo URL
             }
 
-            // Insert the new post into MySQL with or without photo
+            // Insert the new post into MySQL, with the photo field holding the photo URL
             const [result] = await promisePool.execute(
                 'INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo) VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)',
-                [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoPath || null]
+                [message, username, sessionId, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), photoUrl || null]
             );
 
             const newPost = {
@@ -83,7 +66,7 @@ export default async function handler(req, res) {
                 likedBy: [],
                 dislikedBy: [],
                 comments: [],
-                photo: photoPath  // Include the photo path or base64 string
+                photo: photoUrl  // Store the photo URL or base64 string
             };
 
             // Publish the new post to Ably
@@ -161,7 +144,8 @@ export default async function handler(req, res) {
                 username: post.username,
                 likes: updatedLikes,
                 dislikes: updatedDislikes,
-                comments: JSON.parse(post.comments)
+                comments: JSON.parse(post.comments),
+                photo: post.photo  // Include the photo URL or base64 string
             };
 
             try {
