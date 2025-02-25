@@ -8,7 +8,7 @@ const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Credentials', 'true'); // Enable credentials if needed
 };
 
-// Serverless API handler for getting posts
+// Serverless API handler for posts
 module.exports = async function handler(req, res) {
     setCorsHeaders(res);
 
@@ -19,9 +19,20 @@ module.exports = async function handler(req, res) {
 
     // Handle GET requests to fetch posts
     if (req.method === 'GET') {
+        const { username } = req.query;  // Extract the query parameter (if any)
+
+        let sqlQuery = 'SELECT * FROM posts ORDER BY timestamp DESC';
+        let queryParams = [];
+
+        // If a username is provided, filter posts by username
+        if (username) {
+            sqlQuery = 'SELECT * FROM posts WHERE username = ? ORDER BY timestamp DESC';
+            queryParams = [username];
+        }
+
         try {
-            // Fetch posts from the database, sorted by timestamp (newest first)
-            const [posts] = await promisePool.execute('SELECT * FROM posts ORDER BY timestamp DESC');
+            // Fetch posts from the database, optionally filtered by username
+            const [posts] = await promisePool.execute(sqlQuery, queryParams);
 
             // Map over the posts and parse necessary fields
             const formattedPosts = posts.map(post => {
@@ -29,13 +40,11 @@ module.exports = async function handler(req, res) {
 
                 if (post.photo) {
                     // Ensure the photo is being parsed correctly
-                    // Detecting whether the photo is base64 or a URL
                     if (post.photo.startsWith('http')) {
                         photoUrl = post.photo; // If it's already a valid URL, use it
                     } else if (post.photo.startsWith('data:image/')) {
                         photoUrl = post.photo; // If it's already a base64 string, use it directly
                     } else {
-                        // Otherwise, assume it's base64 and prepend the correct data URL prefix
                         photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
                     }
                 }
