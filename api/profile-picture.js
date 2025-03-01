@@ -55,7 +55,7 @@ const profilePictureHandler = async (req, res) => {
         try {
             // Update the user's profile picture in the database
             const [result] = await promisePool.execute(
-                'UPDATE users SET profile_picture = ? WHERE username = ?',
+                'UPDATE posts SET profile_picture = ? WHERE username = ?',
                 [profilePicture, username]
             );
 
