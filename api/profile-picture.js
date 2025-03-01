@@ -27,7 +27,7 @@ const profilePictureHandler = async (req, res) => {
         try {
             // Retrieve the profile picture from the database
             const [rows] = await promisePool.execute(
-                'SELECT profile_picture FROM users WHERE username = ?',
+                'SELECT profile_picture FROM posts WHERE username = ?',
                 [username]
             );
 
