@@ -1,4 +1,5 @@
 const { promisePool } = require('../utils/db');  // Assuming promisePool is your MySQL connection pool
+
 const setCorsHeaders = (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*'); // Allow all origins, or set a specific origin here
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); // Allow all necessary methods
@@ -73,6 +74,7 @@ const profilePictureHandler = async (req, res) => {
     return res.status(405).json({ message: 'Method not allowed' });
 };
 
-module.exports = { profilePictureHandler };
+// Default export required by serverless environments
+module.exports = profilePictureHandler;
 
 
