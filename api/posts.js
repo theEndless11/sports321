@@ -94,7 +94,6 @@ module.exports = async function handler(req, res) {
                     }
 
                     return {
-                          profile_picture: profilePicture,
                         _id: post._id,
                         message: post.message,
                         timestamp: post.timestamp,
