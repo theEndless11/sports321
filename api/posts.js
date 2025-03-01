@@ -19,16 +19,22 @@ module.exports = async function handler(req, res) {
 
     // Handle GET requests to fetch posts, recommend usernames, or fetch profile picture
     if (req.method === 'GET') {
-        const { username, username_like } = req.query; // Extract the query parameters (if any)
+        const { username, username_like, start_timestamp, end_timestamp } = req.query; // Extract the query parameters (if any)
         
         // Fetch profile picture if the username query is provided
         if (username) {
+            let sqlQuery = 'SELECT profile_picture, timestamp FROM posts WHERE username = ?';
+            let queryParams = [username];
+
+            // Add timestamp filtering if provided
+            if (start_timestamp && end_timestamp) {
+                sqlQuery += ' AND timestamp BETWEEN ? AND ?';
+                queryParams.push(start_timestamp, end_timestamp);
+            }
+
             try {
-                // Retrieve the profile picture from the database
-                const [rows] = await promisePool.execute(
-                    'SELECT profile_picture FROM posts WHERE username = ?',
-                    [username]
-                );
+                // Retrieve the profile picture and timestamp from the database
+                const [rows] = await promisePool.execute(sqlQuery, queryParams);
 
                 if (rows.length === 0) {
                     return res.status(404).json({ message: 'User not found' });
@@ -46,12 +52,10 @@ module.exports = async function handler(req, res) {
 
         // If a username_like is provided, search for matching usernames
         else if (username_like) {
-            // SQL query to fetch usernames starting with the given input
             const sqlQuery = 'SELECT DISTINCT username FROM posts WHERE username LIKE ? ORDER BY username ASC LIMIT 10';
             const queryParams = [`${username_like}%`]; // Wildcard search for usernames starting with username_like
 
             try {
-                // Fetch usernames based on the query
                 const [results] = await promisePool.execute(sqlQuery, queryParams);
                 const usernames = results.map(result => result.username);
                 res.status(200).json(usernames);
@@ -60,14 +64,19 @@ module.exports = async function handler(req, res) {
                 res.status(500).json({ message: 'Error retrieving usernames', error });
             }
         }
-        
-        // Fetch posts
+
+        // Fetch posts with timestamp filtering
         else {
             let sqlQuery = 'SELECT * FROM posts ORDER BY timestamp DESC';
             let queryParams = [];
 
+            // Add timestamp filtering if provided
+            if (start_timestamp && end_timestamp) {
+                sqlQuery = 'SELECT * FROM posts WHERE timestamp BETWEEN ? AND ? ORDER BY timestamp DESC';
+                queryParams = [start_timestamp, end_timestamp];
+            }
+
             try {
-                // Fetch posts from the database
                 const [results] = await promisePool.execute(sqlQuery, queryParams);
 
                 const formattedPosts = results.map(post => {
