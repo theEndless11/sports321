@@ -9,7 +9,7 @@ const setCorsHeaders = (res) => {
 
 // Function to handle profile picture update and retrieval
 const profilePictureHandler = async (req, res) => {
-    setCorsHeaders(req, res);
+    setCorsHeaders(req, res); 
 
     // Handle GET request to retrieve profile picture
     if (req.method === 'GET') {
