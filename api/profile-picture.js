@@ -36,7 +36,7 @@ const profilePictureHandler = async (req, res) => {
             }
 
             // If no profile picture exists, return a default one
-            const profilePicture = rows[0].profile_picture || 'defaultProfilePicture.jpg';
+            const profilePicture = rows[0].profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg';
             return res.status(200).json({ profilePicture });
         } catch (error) {
             console.error('Error retrieving profile picture:', error);
