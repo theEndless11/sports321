@@ -1,4 +1,5 @@
 const { promisePool } = require('../utils/db');  // Corrected to use MySQL connection pool
+
 // Set CORS headers for all methods
 const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Origin', '*'); // Allow all origins or set a specific domain
@@ -9,7 +10,7 @@ const setCorsHeaders = (res) => {
 
 // Function to handle profile picture update and retrieval
 const profilePictureHandler = async (req, res) => {
-    setCorsHeaders(req, res); 
+    setCorsHeaders(res); 
 
     // Handle GET request to retrieve profile picture
     if (req.method === 'GET') {
@@ -69,4 +70,6 @@ const profilePictureHandler = async (req, res) => {
     return res.status(405).json({ message: 'Method not allowed' });
 };
 
-module.exports = { profilePictureHandler };
+// Default export for Next.js API route
+export default profilePictureHandler;
+
