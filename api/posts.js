@@ -17,11 +17,11 @@ module.exports = async function handler(req, res) {
         return res.status(200).end();
     }
 
-    // Handle GET requests to fetch posts
+    // Handle GET requests to fetch posts and search suggestions
     if (req.method === 'GET') {
         const { username_like, start_timestamp, end_timestamp } = req.query; // Extract the query parameters (if any)
 
-        let sqlQuery = 'SELECT * FROM posts';
+        let sqlQuery = 'SELECT DISTINCT username, profile_picture FROM posts';
         let queryParams = [];
 
         // If searching for usernames containing the provided value
@@ -37,42 +37,20 @@ module.exports = async function handler(req, res) {
             queryParams.push(start_timestamp, end_timestamp);
         }
 
-        sqlQuery += ' ORDER BY timestamp DESC'; // Sorting posts by timestamp
+        sqlQuery += ' ORDER BY username'; // Sorting suggestions by username
 
         try {
             const [results] = await promisePool.execute(sqlQuery, queryParams);
 
-            const formattedPosts = results.map(post => {
-                let photoUrl = null;
-
-                if (post.photo) {
-                    // Ensure the photo is being parsed correctly
-                    if (post.photo.startsWith('http')) {
-                        photoUrl = post.photo;
-                    } else if (post.photo.startsWith('data:image/')) {
-                        photoUrl = post.photo;
-                    } else {
-                        photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
-                    }
-                }
-
+            // Format the response to include profile pictures for username suggestions
+            const formattedSuggestions = results.map(user => {
                 return {
-                    _id: post._id,
-                    message: post.message,
-                    timestamp: post.timestamp,
-                    username: post.username,
-                    sessionId: post.sessionId,
-                    likes: post.likes,
-                    dislikes: post.dislikes,
-                    likedBy: post.likedBy ? JSON.parse(post.likedBy) : [],
-                    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
-                    comments: post.comments ? JSON.parse(post.comments) : [],
-                    photo: photoUrl,
-                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+                    username: user.username,
+                    profilePicture: user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
                 };
             });
 
-            res.status(200).json(formattedPosts);
+            res.status(200).json(formattedSuggestions);
         } catch (error) {
             console.error("❌ Error retrieving posts:", error);
             res.status(500).json({ message: 'Error retrieving posts', error });
