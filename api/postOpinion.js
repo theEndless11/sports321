@@ -67,9 +67,10 @@ const handler = async (req, res) => {
                 likedBy: [],
                 dislikedBy: [],
                 comments: [],
-                photo: photoUrl  // Store the photo URL or base64 string
-            };
-
+            photo: photoUrl,
+                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+                };
+ 
             // Publish the new post to Ably
             try {
                 await publishToAbly('newOpinion', newPost);
