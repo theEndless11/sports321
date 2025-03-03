@@ -17,66 +17,65 @@ module.exports = async function handler(req, res) {
         return res.status(200).end();
     }
 
-    // Handle GET requests to fetch posts & users
+    // Handle GET requests to fetch posts
     if (req.method === 'GET') {
-        const { username_like, start_timestamp, end_timestamp } = req.query;
+        const { username_like, start_timestamp, end_timestamp } = req.query; // Extract the query parameters (if any)
+
+        let sqlQuery = 'SELECT * FROM posts';
+        let queryParams = [];
+
+        // If searching for usernames containing the provided value
+        if (username_like) {
+            sqlQuery += ' WHERE username LIKE ?';
+            queryParams.push(`%${username_like}%`);
+        }
+
+        // Add timestamp filtering if provided
+        if (start_timestamp && end_timestamp) {
+            sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
+            sqlQuery += ' timestamp BETWEEN ? AND ?';
+            queryParams.push(start_timestamp, end_timestamp);
+        }
+
+        sqlQuery += ' ORDER BY timestamp DESC'; // Sorting posts by timestamp
 
         try {
-            let users = [];
-            let posts = [];
+            const [results] = await promisePool.execute(sqlQuery, queryParams);
 
-            // 🔍 Fetch matching users (if searching by username)
-            if (username_like) {
-                const [userResults] = await promisePool.execute(
-                    'SELECT username, profile_picture FROM posts WHERE username LIKE ? GROUP BY username ORDER BY username ASC',
-                    [`%${username_like}%`]
-                );
+            const formattedPosts = results.map(post => {
+                let photoUrl = null;
 
-                users = userResults.map(user => ({
-                    username: user.username,
-                    profilePicture: user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
-                }));
-            }
+                if (post.photo) {
+                    // Ensure the photo is being parsed correctly
+                    if (post.photo.startsWith('http')) {
+                        photoUrl = post.photo;
+                    } else if (post.photo.startsWith('data:image/')) {
+                        photoUrl = post.photo;
+                    } else {
+                        photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
+                    }
+                }
 
-            // 🔍 Fetch matching posts
-            let postQuery = 'SELECT * FROM posts';
-            let queryParams = [];
+                return {
+                    _id: post._id,
+                    message: post.message,
+                    timestamp: post.timestamp,
+                    username: post.username,
+                    sessionId: post.sessionId,
+                    likes: post.likes,
+                    dislikes: post.dislikes,
+                    likedBy: post.likedBy ? JSON.parse(post.likedBy) : [],
+                    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
+                    comments: post.comments ? JSON.parse(post.comments) : [],
+                    photo: photoUrl,
+                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+                };
+            });
 
-            if (username_like) {
-                postQuery += ' WHERE username LIKE ?';
-                queryParams.push(`%${username_like}%`);
-            }
-
-            if (start_timestamp && end_timestamp) {
-                postQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
-                postQuery += ' timestamp BETWEEN ? AND ?';
-                queryParams.push(start_timestamp, end_timestamp);
-            }
-
-            postQuery += ' ORDER BY timestamp DESC'; // Sort by latest posts
-
-            const [postResults] = await promisePool.execute(postQuery, queryParams);
-
-            posts = postResults.map(post => ({
-                _id: post._id,
-                message: post.message,
-                timestamp: post.timestamp,
-                username: post.username,
-                sessionId: post.sessionId,
-                likes: post.likes,
-                dislikes: post.dislikes,
-                likedBy: post.likedBy ? JSON.parse(post.likedBy) : [],
-                dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
-                comments: post.comments ? JSON.parse(post.comments) : [],
-                photo: post.photo ? (post.photo.startsWith('http') ? post.photo : `data:image/jpeg;base64,${post.photo.toString('base64')}`) : null,
-                profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
-            }));
-
-            // 📌 Return both users & posts in a single response
-            return res.status(200).json({ users, posts });
+            res.status(200).json(formattedPosts);
         } catch (error) {
-            console.error("❌ Error retrieving data:", error);
-            return res.status(500).json({ message: 'Error retrieving data', error });
+            console.error("❌ Error retrieving posts:", error);
+            res.status(500).json({ message: 'Error retrieving posts', error });
         }
     }
 
@@ -89,6 +88,7 @@ module.exports = async function handler(req, res) {
         }
 
         try {
+            // Update the user's profile picture in the posts table
             const [result] = await promisePool.execute(
                 'UPDATE posts SET profile_picture = ? WHERE username = ?',
                 [profilePicture, username]
@@ -104,6 +104,10 @@ module.exports = async function handler(req, res) {
             return res.status(500).json({ message: 'Error updating profile picture', error });
         }
     }
+
+    // If the method is not GET or POST
+    return res.status(405).json({ message: 'Method not allowed' });
+};
 
     return res.status(405).json({ message: 'Method not allowed' });
 };
