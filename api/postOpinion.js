@@ -1,9 +1,9 @@
-const { promisePool } = require('../utils/db');  // Corrected to use MySQL connection pool
-const { publishToAbly } = require('../utils/ably');  // Assuming this remains the same
+const { promisePool } = require('../utils/db');
+const { publishToAbly } = require('../utils/ably');
 
 // Set CORS headers
 const setCorsHeaders = (req, res) => {
-    const allowedOrigins = ['https://latestnewsandaffairs.site'];  // Add more origins if needed
+    const allowedOrigins = ['https://latestnewsandaffairs.site'];
     const origin = req.headers.origin;
 
     if (allowedOrigins.includes(origin)) {
@@ -28,70 +28,68 @@ const handler = async (req, res) => {
     setCorsHeaders(req, res);
 
     // POST: Create new post
-// POST: Create new post
-if (req.method === 'POST') {
-    const { message, username, sessionId, photo } = req.body;
+    if (req.method === 'POST') {
+        const { message, username, sessionId, photo } = req.body;
 
-    if (!username || !sessionId) {
-        return res.status(400).json({ message: 'Username and sessionId are required' });
-    }
-
-    if (!message && !photo) {
-        return res.status(400).json({ message: 'Post content cannot be empty' });
-    }
-
-    try {
-        let profilePicture = 'https://latestnewsandaffairs.site/public/pfp.jpg'; // Default picture
-
-        // Fetch profile picture from the database
-        const [userResult] = await promisePool.execute(
-            'SELECT profile_picture FROM posts WHERE username = ? LIMIT 1',
-            [username]
-        );
-
-        if (userResult.length > 0 && userResult[0].profile_picture) {
-            profilePicture = userResult[0].profile_picture;
+        if (!username || !sessionId) {
+            return res.status(400).json({ message: 'Username and sessionId are required' });
         }
 
-        let photoUrl = photo || null;
+        if (!message && !photo) {
+            return res.status(400).json({ message: 'Post content cannot be empty' });
+        }
 
-        // Insert the new post into MySQL
-        const [result] = await promisePool.execute(
-            `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, profile_picture)
-             VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?)`,
-            [message || '', username, sessionId, '[]', '[]', '[]', photoUrl, profilePicture]
-        );
-
-        const newPost = {
-            _id: result.insertId,
-            message: message || '',
-            timestamp: new Date(),
-            username,
-            likes: 0,
-            dislikes: 0,
-            likedBy: [],
-            dislikedBy: [],
-            comments: [],
-            photo: photoUrl,
-            profilePicture
-        };
-
-        // Publish the new post to Ably
         try {
-            await publishToAbly('newOpinion', newPost);
+            let profilePicture = 'https://latestnewsandaffairs.site/public/pfp.jpg'; // Default picture
+
+            // Fetch profile picture from the database
+            const [userResult] = await promisePool.execute(
+                'SELECT profile_picture FROM posts WHERE username = ? LIMIT 1',
+                [username]
+            );
+
+            if (userResult.length > 0 && userResult[0].profile_picture) {
+                profilePicture = userResult[0].profile_picture;
+            }
+
+            let photoUrl = photo || null;
+
+            // Insert the new post into MySQL
+            const [result] = await promisePool.execute(
+                `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, profile_picture)
+                 VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?)`,
+                [message || '', username, sessionId, '[]', '[]', '[]', photoUrl, profilePicture]
+            );
+
+            const newPost = {
+                _id: result.insertId,
+                message: message || '',
+                timestamp: new Date(),
+                username,
+                likes: 0,
+                dislikes: 0,
+                likedBy: [],
+                dislikedBy: [],
+                comments: [],
+                photo: photoUrl,
+                profilePicture
+            };
+
+            // Publish the new post to Ably
+            try {
+                await publishToAbly('newOpinion', newPost);
+            } catch (error) {
+                console.error('Error publishing to Ably:', error);
+            }
+
+            return res.status(201).json(newPost);  // Ensure response is sent here and stop further execution
         } catch (error) {
-            console.error('Error publishing to Ably:', error);
+            console.error('Error saving post:', error);
+            return res.status(500).json({ message: 'Error saving post', error });  // Ensure response is sent here
         }
-
-        return res.status(201).json(newPost);
-    } catch (error) {
-        console.error('Error saving post:', error);
-        return res.status(500).json({ message: 'Error saving post', error });
     }
-}
 
-
-    // PUT/PATCH: Handle likes/dislikes (same as before)
+    // PUT/PATCH: Handle likes/dislikes
     if (req.method === 'PUT' || req.method === 'PATCH') {
         const { postId, action, username } = req.body;  // action can be 'like' or 'dislike'
 
@@ -161,15 +159,15 @@ if (req.method === 'POST') {
                 console.error('Error publishing to Ably:', error);
             }
 
-            return res.status(200).json(updatedPost);
+            return res.status(200).json(updatedPost);  // Ensure response is sent here and stop further execution
         } catch (error) {
             console.error('Error updating post:', error);
-            return res.status(500).json({ message: 'Error updating post', error });
+            return res.status(500).json({ message: 'Error updating post', error });  // Ensure response is sent here
         }
     }
 
     // Handle other methods
-    return res.status(405).json({ message: 'Method Not Allowed' });
+    return res.status(405).json({ message: 'Method Not Allowed' });  // Ensure this is the last response in case method is not supported
 };
 
 module.exports = handler;
