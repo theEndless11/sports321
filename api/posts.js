@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
 
     // Handle pre-flight OPTIONS request
     if (req.method === 'OPTIONS') {
-        return res.status(200).end();
+        return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
 
     // Handle GET requests to fetch posts
@@ -72,10 +72,10 @@ module.exports = async function handler(req, res) {
                 };
             });
 
-            res.status(200).json(formattedPosts);
+            return res.status(200).json(formattedPosts); // Return response after processing
         } catch (error) {
             console.error("❌ Error retrieving posts:", error);
-            res.status(500).json({ message: 'Error retrieving posts', error });
+            return res.status(500).json({ message: 'Error retrieving posts', error });
         }
     }
 
