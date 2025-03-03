@@ -105,9 +105,7 @@ module.exports = async function handler(req, res) {
         }
     }
 
-    return res.status(405).json({ message: 'Method not allowed' });
-};
-
     // If the method is not GET or POST
     return res.status(405).json({ message: 'Method not allowed' });
 };
+
