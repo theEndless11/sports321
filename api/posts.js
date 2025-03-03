@@ -17,17 +17,17 @@ module.exports = async function handler(req, res) {
         return res.status(200).end();
     }
 
-    // Handle GET requests to fetch posts, recommend usernames, or fetch profile picture
+    // Handle GET requests to fetch posts
     if (req.method === 'GET') {
         const { username_like, start_timestamp, end_timestamp } = req.query; // Extract the query parameters (if any)
 
-        // Fetch posts with profile pictures
-        let sqlQuery = 'SELECT posts.*, u.profile_picture FROM posts posts LEFT JOIN users u ON posts.username = u.username ORDER BY posts.timestamp DESC';
+        // Fetch posts with profile pictures from the posts table
+        let sqlQuery = 'SELECT * FROM posts ORDER BY timestamp DESC';
         let queryParams = [];
 
         // Add timestamp filtering if provided
         if (start_timestamp && end_timestamp) {
-            sqlQuery = 'SELECT posts.*, u.profile_picture FROM posts posts LEFT JOIN users u ON posts.username = u.username WHERE posts.timestamp BETWEEN ? AND ? ORDER BY posts.timestamp DESC';
+            sqlQuery = 'SELECT * FROM posts WHERE timestamp BETWEEN ? AND ? ORDER BY timestamp DESC';
             queryParams = [start_timestamp, end_timestamp];
         }
 
@@ -80,9 +80,9 @@ module.exports = async function handler(req, res) {
         }
 
         try {
-            // Update the user's profile picture in the database
+            // Update the user's profile picture in the posts table
             const [result] = await promisePool.execute(
-                'UPDATE users SET profile_picture = ? WHERE username = ?',
+                'UPDATE posts SET profile_picture = ? WHERE username = ?',
                 [profilePicture, username]
             );
 
@@ -100,4 +100,3 @@ module.exports = async function handler(req, res) {
     // If the method is not GET or POST
     return res.status(405).json({ message: 'Method not allowed' });
 };
-
