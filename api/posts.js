@@ -21,15 +21,23 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET') {
         const { username_like, start_timestamp, end_timestamp } = req.query; // Extract the query parameters (if any)
 
-        // Fetch posts with profile pictures from the posts table
-        let sqlQuery = 'SELECT * FROM posts ORDER BY timestamp DESC';
+        let sqlQuery = 'SELECT * FROM posts';
         let queryParams = [];
+
+        // If searching for usernames containing the provided value
+        if (username_like) {
+            sqlQuery += ' WHERE username LIKE ?';
+            queryParams.push(`%${username_like}%`);
+        }
 
         // Add timestamp filtering if provided
         if (start_timestamp && end_timestamp) {
-            sqlQuery = 'SELECT * FROM posts WHERE timestamp BETWEEN ? AND ? ORDER BY timestamp DESC';
-            queryParams = [start_timestamp, end_timestamp];
+            sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
+            sqlQuery += ' timestamp BETWEEN ? AND ?';
+            queryParams.push(start_timestamp, end_timestamp);
         }
+
+        sqlQuery += ' ORDER BY timestamp DESC'; // Sorting posts by timestamp
 
         try {
             const [results] = await promisePool.execute(sqlQuery, queryParams);
@@ -40,9 +48,9 @@ module.exports = async function handler(req, res) {
                 if (post.photo) {
                     // Ensure the photo is being parsed correctly
                     if (post.photo.startsWith('http')) {
-                        photoUrl = post.photo; // If it's already a valid URL, use it
+                        photoUrl = post.photo;
                     } else if (post.photo.startsWith('data:image/')) {
-                        photoUrl = post.photo; // If it's already a base64 string, use it directly
+                        photoUrl = post.photo;
                     } else {
                         photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
                     }
@@ -59,8 +67,8 @@ module.exports = async function handler(req, res) {
                     likedBy: post.likedBy ? JSON.parse(post.likedBy) : [],
                     dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
                     comments: post.comments ? JSON.parse(post.comments) : [],
-                    photo: photoUrl, // Add the formatted photo URL here
-                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture if none exists
+                    photo: photoUrl,
+                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
                 };
             });
 
@@ -73,7 +81,7 @@ module.exports = async function handler(req, res) {
 
     // Handle POST requests to update profile picture
     else if (req.method === 'POST') {
-        const { username, profilePicture } = req.body;  // Expecting profile picture as a URL or base64 data
+        const { username, profilePicture } = req.body;
 
         if (!username || !profilePicture) {
             return res.status(400).json({ message: 'Username and profile picture are required' });
@@ -96,6 +104,9 @@ module.exports = async function handler(req, res) {
             return res.status(500).json({ message: 'Error updating profile picture', error });
         }
     }
+
+    return res.status(405).json({ message: 'Method not allowed' });
+};
 
     // If the method is not GET or POST
     return res.status(405).json({ message: 'Method not allowed' });
