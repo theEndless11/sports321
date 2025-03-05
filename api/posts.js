@@ -18,36 +18,42 @@ module.exports = async function handler(req, res) {
     }
 
     // Handle GET requests to fetch posts and user descriptions
-if (req.method === 'GET') {
-    const { username_like, start_timestamp, end_timestamp, username } = req.query;
-    let sqlQuery = 'SELECT * FROM posts';
-    let queryParams = [];
 
-    if (username_like) {
-        sqlQuery += ' WHERE username LIKE ?';
-        queryParams.push(`%${username_like}%`);
-    }
+    // Handle GET requests to fetch posts and user descriptions
+    if (req.method === 'GET') {
+        const { username_like, start_timestamp, end_timestamp, username } = req.query; // Extract query parameters
 
-    if (start_timestamp && end_timestamp) {
-        sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
-        sqlQuery += ' timestamp BETWEEN ? AND ?';
-        queryParams.push(start_timestamp, end_timestamp);
-    }
+        let sqlQuery = 'SELECT * FROM posts';
+        let queryParams = [];
 
-    sqlQuery += ' ORDER BY timestamp DESC';
+        // Fetch posts with timestamp filtering and username search
+        if (username_like) {
+            sqlQuery += ' WHERE username LIKE ?';
+            queryParams.push(`%${username_like}%`);
+        }
 
-    try {
-        const [results] = await promisePool.execute(sqlQuery, queryParams);
+        if (start_timestamp && end_timestamp) {
+            sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
+            sqlQuery += ' timestamp BETWEEN ? AND ?';
+            queryParams.push(start_timestamp, end_timestamp);
+        }
 
-        const formattedPosts = results.map(post => {
-            let photoUrl = null;
-            if (post.photo) {
-                if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
-                    photoUrl = post.photo;
-                } else {
-                    photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
+        sqlQuery += ' ORDER BY timestamp DESC';
+
+        try {
+            const [results] = await promisePool.execute(sqlQuery, queryParams);
+
+            const formattedPosts = results.map(post => {
+                let photoUrl = null;
+
+                if (post.photo) {
+                    if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
+                        photoUrl = post.photo;
+                    } else {
+                        photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
+                    }
                 }
-            }
+
 
             // Ensure description exists or use a fallback
             const description = post.description || 'No description available.';
