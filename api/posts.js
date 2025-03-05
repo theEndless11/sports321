@@ -64,7 +64,8 @@ module.exports = async function handler(req, res) {
                     timestamp: comment.timestamp
                 })),
                 photo: photoUrl,
-                profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+                profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture
+                description: post.description || ''  // Include description in the post data
             });
 
         } catch (error) {
@@ -121,7 +122,7 @@ module.exports = async function handler(req, res) {
                     }
                 }
 
-                // Return the formatted post with comments
+                // Return the formatted post with comments and description
                 return {
                     _id: post._id,
                     message: post.message,
@@ -138,18 +139,85 @@ module.exports = async function handler(req, res) {
                         timestamp: comment.timestamp
                     })),
                     photo: photoUrl,
-                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture
+                    description: post.description || ''  // Include description in the post data
                 };
             }));
 
-            // Return the posts with comments
+            // Return the posts with comments and descriptions
             return res.status(200).json(formattedPosts);
 
         } catch (error) {
             console.error("❌ Error retrieving posts:", error);
             return res.status(500).json({ message: 'Error retrieving posts', error });
         }
-    } else {
+    }
+
+    // Handle POST requests for updating descriptions and profile pictures
+    else if (req.method === 'POST') {
+        const { username, description, profilePicture } = req.body;
+
+        if (!username) {
+            return res.status(400).json({ message: 'Username is required' });
+        }
+
+        try {
+            // Check if the user exists before updating the description or profile picture
+            const [userCheck] = await promisePool.execute('SELECT 1 FROM posts WHERE username = ?', [username]);
+
+            if (userCheck.length === 0) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+
+            let updateQuery = 'UPDATE posts SET ';
+            let updateParams = [];
+
+            // Handle description update
+            if (description !== undefined) {
+                if (description.trim() === '') {
+                    return res.status(400).json({ message: 'Description cannot be empty' });
+                }
+                updateQuery += 'description = ?, ';
+                updateParams.push(description);
+            }
+
+            // Handle profile picture update
+            if (profilePicture !== undefined) {
+                if (profilePicture.trim() === '') {
+                    return res.status(400).json({ message: 'Profile picture cannot be empty' });
+                }
+                updateQuery += 'profile_picture = ?, ';
+                updateParams.push(profilePicture);
+            }
+
+            // Remove trailing comma and space
+            updateQuery = updateQuery.slice(0, -2);
+            updateQuery += ' WHERE username = ? LIMIT 1';
+            updateParams.push(username);
+
+            // Update the description and/or profile picture in the database
+            const [result] = await promisePool.execute(updateQuery, updateParams);
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ message: 'User not found to update description or profile picture' });
+            }
+
+            // Return the updated data in the response
+            return res.status(200).json({
+                message: 'Profile updated successfully',
+                description: description || 'No description provided',
+                profilePicture: profilePicture || 'No profile picture provided'
+            });
+
+        } catch (error) {
+            console.error("❌ Error updating profile:", error);
+            return res.status(500).json({ message: 'Error updating profile', error });
+        }
+    }
+
+    // Method not allowed handler
+    else {
         return res.status(405).json({ message: 'Method Not Allowed' });
     }
 };
+
