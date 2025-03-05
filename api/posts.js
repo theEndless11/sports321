@@ -52,6 +52,7 @@ module.exports = async function handler(req, res) {
                     }
                 }
 
+                // Assuming 'description' exists in the 'posts' table, include it in the post object
                 return {
                     _id: post._id,
                     message: post.message,
@@ -64,11 +65,12 @@ module.exports = async function handler(req, res) {
                     dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
                     comments: post.comments ? JSON.parse(post.comments || '[]') : [],
                     photo: photoUrl,
-                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture
+                    description: post.description || '' // Include the description from the post data
                 };
             });
 
-            // Fetch user description if username is provided
+            // Fetch user description if username is provided (this is already included in the posts above, but for clarity)
             if (username) {
                 const descriptionQuery = 'SELECT description FROM posts WHERE username = ?';
                 const [userDescriptionResult] = await promisePool.execute(descriptionQuery, [username]);
@@ -93,6 +95,14 @@ module.exports = async function handler(req, res) {
         }
 
         try {
+            // Check if user exists before updating the description
+            const [userCheck] = await promisePool.execute('SELECT 1 FROM posts WHERE username = ?', [username]);
+
+            if (userCheck.length === 0) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+
+            // Handle description update
             if (description) {
                 // Ensure the description is not empty
                 if (description.trim() === '') {
@@ -100,10 +110,16 @@ module.exports = async function handler(req, res) {
                 }
 
                 // Update the description in the database
-                await promisePool.execute('UPDATE posts SET description = ? WHERE username = ?', [description, username]);
+                const [result] = await promisePool.execute('UPDATE posts SET description = ? WHERE username = ?', [description, username]);
+
+                if (result.affectedRows === 0) {
+                    return res.status(404).json({ message: 'User not found to update description' });
+                }
+
                 return res.status(200).json({ message: 'Description updated successfully' });
             }
 
+            // Handle profile picture update
             if (profilePicture) {
                 // Update the user's profile picture in the posts table
                 const [result] = await promisePool.execute(
