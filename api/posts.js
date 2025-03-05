@@ -17,35 +17,30 @@ module.exports = async function handler(req, res) {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
 
- if (req.method === 'GET') {
-    const { username_like, start_timestamp, end_timestamp } = req.query; // Extract the query parameters (if any)
-
+if (req.method === 'GET') {
+    const { username_like, start_timestamp, end_timestamp, username } = req.query;
     let sqlQuery = 'SELECT * FROM posts';
     let queryParams = [];
 
-    // If searching for usernames containing the provided value
     if (username_like) {
         sqlQuery += ' WHERE username LIKE ?';
         queryParams.push(`%${username_like}%`);
     }
 
-    // Add timestamp filtering if provided
     if (start_timestamp && end_timestamp) {
         sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
         sqlQuery += ' timestamp BETWEEN ? AND ?';
         queryParams.push(start_timestamp, end_timestamp);
     }
 
-    sqlQuery += ' ORDER BY timestamp DESC'; // Sorting posts by timestamp
+    sqlQuery += ' ORDER BY timestamp DESC';
 
     try {
         const [results] = await promisePool.execute(sqlQuery, queryParams);
 
         const formattedPosts = results.map(post => {
             let photoUrl = null;
-
             if (post.photo) {
-                // Ensure the photo is being parsed correctly
                 if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
                     photoUrl = post.photo;
                 } else {
@@ -53,30 +48,34 @@ module.exports = async function handler(req, res) {
                 }
             }
 
-                return {
-                    _id: post._id,
-                    message: post.message,
-                    timestamp: post.timestamp,
-                    username: post.username,
-                    sessionId: post.sessionId,
-                    likes: post.likes,
-                    dislikes: post.dislikes,
-                    likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
-                    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
-                    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
-                    photo: photoUrl,
-                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture
-                    description: post.description || 'No description available.'
-                };
-            });
+            // Ensure description exists or use a fallback
+            const description = post.description || 'No description available.';
 
-            return res.status(200).json({ posts: formattedPosts });
+            return {
+                _id: post._id,
+                message: post.message,
+                timestamp: post.timestamp,
+                username: post.username,
+                sessionId: post.sessionId,
+                likes: post.likes,
+                dislikes: post.dislikes,
+                likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
+                dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
+                comments: post.comments ? JSON.parse(post.comments || '[]') : [],
+                photo: photoUrl,
+                profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture
+                description: description // Directly use the description from the post
+            };
+        });
 
-        } catch (error) {
-            console.error("❌ Error retrieving posts:", error);
-            return res.status(500).json({ message: 'Error retrieving posts', error });
-        }
+        // Return posts with description
+        return res.status(200).json({ posts: formattedPosts });
+
+    } catch (error) {
+        console.error("❌ Error retrieving posts:", error);
+        return res.status(500).json({ message: 'Error retrieving posts', error });
     }
+}
 
     // Handle POST requests for updating descriptions and profile pictures
     if (req.method === 'POST') {
