@@ -52,24 +52,21 @@ module.exports = async function handler(req, res) {
                     }
                 }
 
-                  return {
-                _id: post._id,
-                message: post.message,
-                timestamp: post.timestamp,
-                username: post.username,
-                sessionId: post.sessionId,
-                likes: post.likes,
-                dislikes: post.dislikes,
-                likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
-                dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
-                comments: post.comments ? JSON.parse(post.comments || '[]') : [],
-                photo: photoUrl,
-                profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture
-                description: description // Directly use the description from the post
-            };
-        });
-
-
+                return {
+                    _id: post._id,
+                    message: post.message,
+                    timestamp: post.timestamp,
+                    username: post.username,
+                    sessionId: post.sessionId,
+                    likes: post.likes,
+                    dislikes: post.dislikes,
+                    likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
+                    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
+                    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
+                    photo: photoUrl,
+                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+                };
+            });
 
             // Fetch user description if username is provided
             if (username) {
@@ -131,3 +128,4 @@ module.exports = async function handler(req, res) {
     // Handle unsupported methods
     return res.status(405).json({ message: 'Method Not Allowed' });
 };
+
