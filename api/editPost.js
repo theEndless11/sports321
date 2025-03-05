@@ -73,36 +73,43 @@ module.exports = async function handler(req, res) {
                 post.dislikedBy.push(username);
             }
 
-        // Handle the "comment" action
-        } else if (action === 'comment') {
-            if (!comment || !comment.trim()) {
-                return res.status(400).json({ message: 'Comment cannot be empty' });
-            }
+// Handle the "comment" action
+} else if (action === 'comment') {
+    if (!comment || !comment.trim()) {
+        return res.status(400).json({ message: 'Comment cannot be empty' });
+    }
 
-            post.comments.push({ username, comment, timestamp: new Date() });
-
-        } else {
-            return res.status(400).json({ message: 'Invalid action type' });
-        }
-
-        // Update the post in the MySQL database
+    try {
+        // Insert the new comment into the `comments` table
         await promisePool.execute(
-            `UPDATE posts SET likes = ?, dislikes = ?, likedBy = ?, dislikedBy = ?, comments = ? WHERE _id = ?`,
-            [
-                post.likes,
-                post.dislikes,
-                JSON.stringify(post.likedBy),
-                JSON.stringify(post.dislikedBy),
-                JSON.stringify(post.comments),
-                postId
-            ]
+            `INSERT INTO comments (post_id, username, message, timestamp) VALUES (?, ?, ?, ?)`,
+            [postId, username, comment, new Date()]
         );
 
-        // Return the updated post as a response
-        res.status(200).json(post);
+        // Fetch the updated comments for the post
+        const [commentsResult] = await promisePool.execute(
+            `SELECT * FROM comments WHERE post_id = ? ORDER BY timestamp DESC`,
+            [postId]
+        );
+
+        // Return the updated post with comments
+        const [postResult] = await promisePool.execute(
+            `SELECT * FROM posts WHERE _id = ?`,
+            [postId]
+        );
+
+        if (postResult.length === 0) {
+            return res.status(404).json({ message: 'Post not found' });
+        }
+
+        const post = postResult[0];
+        post.comments = commentsResult; // Attach the comments to the post
+
+        res.status(200).json({ message: 'Comment added successfully', post });
 
     } catch (error) {
-        console.error("Error updating post:", error);
-        res.status(500).json({ message: 'Error updating post', error });
+        console.error("Error adding comment:", error);
+        res.status(500).json({ message: 'Error adding comment', error });
     }
 }
+
