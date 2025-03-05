@@ -8,7 +8,7 @@ const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');  // Allowed headers
 };
 
-// Serverless API handler for posts, profile pictures, and user descriptions
+// Serverless API handler for posts and profile pictures
 module.exports = async function handler(req, res) {
     setCorsHeaders(res);
 
@@ -17,28 +17,27 @@ module.exports = async function handler(req, res) {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
 
-if (req.method === 'GET') {
-    const { username_like, start_timestamp, end_timestamp, username } = req.query;
-    let sqlQuery = 'SELECT * FROM posts';
-    let queryParams = [];
+    // Handle GET requests to fetch a single post
+    if (req.method === 'GET' && req.url.startsWith('/api/posts/')) {
+        const postId = req.url.split('/')[3]; // Extract postId from the URL
 
-    if (username_like) {
-        sqlQuery += ' WHERE username LIKE ?';
-        queryParams.push(`%${username_like}%`);
-    }
+        try {
+            // Fetch the post with the provided postId
+            const [posts] = await promisePool.execute('SELECT * FROM posts WHERE _id = ?', [postId]);
 
-    if (start_timestamp && end_timestamp) {
-        sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
-        sqlQuery += ' timestamp BETWEEN ? AND ?';
-        queryParams.push(start_timestamp, end_timestamp);
-    }
+            if (posts.length === 0) {
+                return res.status(404).json({ message: 'Post not found' });
+            }
 
-    sqlQuery += ' ORDER BY timestamp DESC';
+            const post = posts[0];
 
-    try {
-        const [results] = await promisePool.execute(sqlQuery, queryParams);
+            // Fetch the comments for this post
+            const [commentsResult] = await promisePool.execute(
+                'SELECT * FROM comments WHERE post_id = ? ORDER BY timestamp DESC',
+                [postId]
+            );
 
-        const formattedPosts = results.map(post => {
+            // Format the photo URL
             let photoUrl = null;
             if (post.photo) {
                 if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
@@ -48,10 +47,8 @@ if (req.method === 'GET') {
                 }
             }
 
-            // Ensure description exists or use a fallback
-            const description = post.description || 'No description available.';
-
-            return {
+            // Return the post with comments
+            return res.status(200).json({
                 _id: post._id,
                 message: post.message,
                 timestamp: post.timestamp,
@@ -61,81 +58,98 @@ if (req.method === 'GET') {
                 dislikes: post.dislikes,
                 likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
                 dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
-                comments: post.comments ? JSON.parse(post.comments || '[]') : [],
+                comments: commentsResult.map(comment => ({
+                    username: comment.username,
+                    comment: comment.message,
+                    timestamp: comment.timestamp
+                })),
                 photo: photoUrl,
-                profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture
-                description: description // Directly use the description from the post
-            };
-        });
-
-        // Return posts with description
-        return res.status(200).json({ posts: formattedPosts });
-
-    } catch (error) {
-        console.error("❌ Error retrieving posts:", error);
-        return res.status(500).json({ message: 'Error retrieving posts', error });
-    }
-}
-
-    // Handle POST requests for updating descriptions and profile pictures
-    if (req.method === 'POST') {
-        const { username, description, profilePicture } = req.body;
-
-        if (!username) {
-            return res.status(400).json({ message: 'Username is required' });
-        }
-
-        if (description === undefined && profilePicture === undefined) {
-            return res.status(400).json({ message: 'No valid data provided to update' });
-        }
-
-        try {
-            // Check if the user exists
-            const [userCheck] = await promisePool.execute('SELECT 1 FROM posts WHERE username = ?', [username]);
-
-            if (userCheck.length === 0) {
-                return res.status(404).json({ message: 'User not found' });
-            }
-
-            let updateMessages = [];
-
-            // Update description if provided
-            if (description !== undefined) {
-                if (description.trim() === '') {
-                    return res.status(400).json({ message: 'Description cannot be empty' });
-                }
-
-                const [descResult] = await promisePool.execute(
-                    'UPDATE posts SET description = ? WHERE username = ? LIMIT 1',
-                    [description, username]
-                );
-
-                if (descResult.affectedRows > 0) {
-                    updateMessages.push('Description updated successfully');
-                }
-            }
-
-            // Update profile picture if provided
-            if (profilePicture !== undefined) {
-                const [picResult] = await promisePool.execute(
-                    'UPDATE posts SET profile_picture = ? WHERE username = ?',
-                    [profilePicture, username]
-                );
-
-                if (picResult.affectedRows > 0) {
-                    updateMessages.push('Profile picture updated successfully');
-                }
-            }
-
-            return res.status(200).json({ message: updateMessages.join(' and ') });
+                profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+            });
 
         } catch (error) {
-            console.error('❌ Error updating profile:', error);
-            return res.status(500).json({ message: 'Error updating profile', error });
+            console.error("❌ Error retrieving post:", error);
+            return res.status(500).json({ message: 'Error retrieving post', error });
         }
     }
 
-    // Handle unsupported methods
-    return res.status(405).json({ message: 'Method Not Allowed' });
-};
+    // Handle GET requests to fetch multiple posts
+    else if (req.method === 'GET') {
+        // Parse query parameters manually (for non-Express environments)
+        const urlObj = new URL(req.url, `http://${req.headers.host}`);
+        const username_like = urlObj.searchParams.get('username_like');
+        const start_timestamp = urlObj.searchParams.get('start_timestamp');
+        const end_timestamp = urlObj.searchParams.get('end_timestamp');
 
+        let sqlQuery = 'SELECT * FROM posts';
+        let queryParams = [];
+
+        // If searching for usernames containing the provided value
+        if (username_like) {
+            sqlQuery += ' WHERE username LIKE ?';
+            queryParams.push(`%${username_like}%`);
+        }
+
+        // Add timestamp filtering if provided
+        if (start_timestamp && end_timestamp) {
+            sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
+            sqlQuery += ' timestamp BETWEEN ? AND ?';
+            queryParams.push(start_timestamp, end_timestamp);
+        }
+
+        sqlQuery += ' ORDER BY timestamp DESC'; // Sorting posts by timestamp
+
+        try {
+            // Fetch posts
+            const [results] = await promisePool.execute(sqlQuery, queryParams);
+
+            // Create a list of posts with comments attached
+            const formattedPosts = await Promise.all(results.map(async (post) => {
+                // Fetch the comments for this post from the `comments` table
+                const [commentsResult] = await promisePool.execute(
+                    'SELECT * FROM comments WHERE post_id = ? ORDER BY timestamp DESC',
+                    [post._id]
+                );
+
+                // Format the photo URL
+                let photoUrl = null;
+                if (post.photo) {
+                    if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
+                        photoUrl = post.photo;
+                    } else {
+                        photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
+                    }
+                }
+
+                // Return the formatted post with comments
+                return {
+                    _id: post._id,
+                    message: post.message,
+                    timestamp: post.timestamp,
+                    username: post.username,
+                    sessionId: post.sessionId,
+                    likes: post.likes,
+                    dislikes: post.dislikes,
+                    likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
+                    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
+                    comments: commentsResult.map(comment => ({
+                        username: comment.username,
+                        comment: comment.message,
+                        timestamp: comment.timestamp
+                    })),
+                    photo: photoUrl,
+                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+                };
+            }));
+
+            // Return the posts with comments
+            return res.status(200).json(formattedPosts);
+
+        } catch (error) {
+            console.error("❌ Error retrieving posts:", error);
+            return res.status(500).json({ message: 'Error retrieving posts', error });
+        }
+    } else {
+        return res.status(405).json({ message: 'Method Not Allowed' });
+    }
+};
