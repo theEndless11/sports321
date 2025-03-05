@@ -17,57 +17,42 @@ module.exports = async function handler(req, res) {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
 
-   // Handle GET requests to fetch posts and user descriptions
-if (req.method === 'GET') {
-    const { username_like, start_timestamp, end_timestamp, username } = req.query; // Extract query parameters
+    // Handle GET requests to fetch posts and user descriptions
+    if (req.method === 'GET') {
+        const { username_like, start_timestamp, end_timestamp, username } = req.query; // Extract query parameters
 
-    let sqlQuery = 'SELECT * FROM posts';
-    let queryParams = [];
+        let sqlQuery = 'SELECT * FROM posts';
+        let queryParams = [];
 
-    // Fetch posts with username filtering
-    if (username_like) {
-        sqlQuery += ' WHERE username LIKE ?';
-        queryParams.push(`%${username_like}%`);
-    }
-
-    // Fetch posts with timestamp filtering
-    if (start_timestamp && end_timestamp) {
-        sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
-        sqlQuery += ' timestamp BETWEEN ? AND ?';
-        queryParams.push(start_timestamp, end_timestamp);
-    }
-
-    sqlQuery += ' ORDER BY timestamp DESC';
-
-    try {
-        // Log the constructed SQL query for debugging
-        console.log('Executing SQL query:', sqlQuery);
-        console.log('With query parameters:', queryParams);
-
-        const [results] = await promisePool.execute(sqlQuery, queryParams);
-
-        // Log the results to make sure we get posts
-        console.log('Fetched posts:', results);
-
-        if (results.length === 0) {
-            return res.status(404).json({ message: 'No posts found' });
+        // Fetch posts with timestamp filtering and username search
+        if (username_like) {
+            sqlQuery += ' WHERE username LIKE ?';
+            queryParams.push(`%${username_like}%`);
         }
 
-        const formattedPosts = results.map(post => {
-            let photoUrl = null;
+        if (start_timestamp && end_timestamp) {
+            sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
+            sqlQuery += ' timestamp BETWEEN ? AND ?';
+            queryParams.push(start_timestamp, end_timestamp);
+        }
 
-            if (post.photo) {
-                if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
-                    photoUrl = post.photo;
-                } else {
-                    photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
+        sqlQuery += ' ORDER BY timestamp DESC';
+
+        try {
+            const [results] = await promisePool.execute(sqlQuery, queryParams);
+
+            const formattedPosts = results.map(post => {
+                let photoUrl = null;
+
+                if (post.photo) {
+                    if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
+                        photoUrl = post.photo;
+                    } else {
+                        photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
+                    }
                 }
-            }
 
-            // Ensure description exists or use a fallback
-            const description = post.description || 'No description available.';
-
-            return {
+                  return {
                 _id: post._id,
                 message: post.message,
                 timestamp: post.timestamp,
@@ -84,15 +69,23 @@ if (req.method === 'GET') {
             };
         });
 
-        // Return posts with description
-        return res.status(200).json({ posts: formattedPosts });
 
-    } catch (error) {
-        console.error("❌ Error retrieving posts:", error);
-        return res.status(500).json({ message: 'Error retrieving posts', error });
+
+            // Fetch user description if username is provided
+            if (username) {
+                const descriptionQuery = 'SELECT description FROM posts WHERE username = ?';
+                const [userDescriptionResult] = await promisePool.execute(descriptionQuery, [username]);
+
+                const description = userDescriptionResult.length > 0 ? userDescriptionResult[0].description : '';
+                return res.status(200).json({ posts: formattedPosts, description }); // Return both posts and description
+            }
+
+            return res.status(200).json(formattedPosts);
+        } catch (error) {
+            console.error("❌ Error retrieving posts:", error);
+            return res.status(500).json({ message: 'Error retrieving posts', error });
+        }
     }
-}
-
 
     // Handle POST requests for updating descriptions and profile pictures
     if (req.method === 'POST') {
@@ -138,4 +131,3 @@ if (req.method === 'GET') {
     // Handle unsupported methods
     return res.status(405).json({ message: 'Method Not Allowed' });
 };
-
