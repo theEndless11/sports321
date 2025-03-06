@@ -83,13 +83,13 @@ module.exports = async function handler(req, res) {
             try {
                 // Insert the new comment into the `comments` table
                 await promisePool.execute(
-                    `INSERT INTO comments (post_id, username, message, timestamp) VALUES (?, ?, ?, ?)`,
+                    `INSERT INTO posts (post_id, username, message, timestamp) VALUES (?, ?, ?, ?)`,
                     [postId, username, comment, new Date()]
                 );
 
                 // Fetch the updated comments for the post
                 const [commentsResult] = await promisePool.execute(
-                    `SELECT * FROM comments WHERE post_id = ? ORDER BY timestamp DESC`,
+                    `SELECT * FROM posts WHERE post_id = ? ORDER BY timestamp DESC`,
                     [postId]
                 );
 
