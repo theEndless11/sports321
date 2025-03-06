@@ -66,7 +66,7 @@ if (req.method === 'GET') {
                 _id: comment._id,
                 postId: comment.post_id,
                 username: comment.username,
-                comment: comment.comment,
+                 comments: post.comments ? JSON.parse(post.comments || '[]') : [],
                 timestamp: comment.timestamp
             }));
 
