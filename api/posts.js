@@ -61,14 +61,15 @@ if (req.method === 'GET') {
             const commentsQuery = 'SELECT * FROM comments WHERE post_id = ? ORDER BY timestamp ASC';
             const [commentsResults] = await promisePool.execute(commentsQuery, [post._id]);
 
-            // Format comments to match the structure
-            const formattedComments = commentsResults.map(comment => ({
-                _id: comment._id,
-                postId: comment.post_id,
-                username: comment.username,
-                 comments: post.comments ? JSON.parse(post.comments || '[]') : [],
-                timestamp: comment.timestamp
-            }));
+           // Format comments to match the structure
+const formattedComments = commentsResults.map(comment => ({
+    _id: comment._id,               // Assuming _id is the comment's ID
+    postId: comment.post_id,        // The post ID that the comment belongs to
+    username: comment.username,     // The username of the commenter
+    comment: comment.comment,       // The comment content
+    timestamp: comment.timestamp    // Timestamp for the comment
+}));
+
 
             // Process the post data (including photo handling)
             let photoUrl = null;
