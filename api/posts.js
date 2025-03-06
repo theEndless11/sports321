@@ -92,6 +92,7 @@ if (req.method === 'GET') {
                 likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
                 dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
                 photo: photoUrl,
+                   comments: post.comments ? JSON.parse(post.comments || '[]') : [],
                 profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
             });
         }
