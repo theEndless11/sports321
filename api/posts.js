@@ -93,7 +93,7 @@ const formattedComments = commentsResults.map(comment => ({
                 likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
                 dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
                 photo: photoUrl,
-                   comments: post.comments ? JSON.parse(post.comments || '[]') : [],
+                  comments: formattedComments,  // Include the comments for this post
                 profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
             });
         }
