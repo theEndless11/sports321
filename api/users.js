@@ -26,7 +26,7 @@ module.exports.handler = async (event, context) => {
         setCorsHeaders(res); // Set CORS headers for actual request
 
         // Query to fetch users and their profile pictures
-        const [users] = await promisePool.execute('SELECT username, profile_picture FROM users');
+        const [users] = await promisePool.execute('SELECT username, profile_picture FROM posts');
 
         // Respond with the list of users
         res.body = JSON.stringify(users);
