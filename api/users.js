@@ -8,34 +8,28 @@ const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Credentials', 'true'); // Enable credentials if needed
 };
 
-// The Lambda handler function
-module.exports.handler = async (event, context) => {
-    const res = {
-        statusCode: 200,
-        headers: {},
-        body: '',
-    };
-
+// API handler to fetch users and their profile pictures
+const handler = async (req, res) => {
     try {
         // Handle OPTIONS request (preflight check for CORS)
-        if (event.httpMethod === 'OPTIONS') {
+        if (req.method === 'OPTIONS') {
             setCorsHeaders(res);
-            return { ...res, statusCode: 204 };  // Return 204 for preflight response
+            return res.status(204).end();  // Return 204 for preflight response
         }
 
         setCorsHeaders(res); // Set CORS headers for actual request
 
         // Query to fetch users and their profile pictures
-        const [users] = await promisePool.execute('SELECT username, profile_picture FROM posts');
+        const [users] = await promisePool.execute('SELECT username, profile_picture FROM users');
 
         // Respond with the list of users
-        res.body = JSON.stringify(users);
+        res.status(200).json(users);
     } catch (error) {
         console.error("❌ Error fetching users:", error);
-        res.statusCode = 500;
-        res.body = JSON.stringify({ message: 'Error fetching users', error });
+        res.status(500).json({ message: 'Error fetching users', error });
     }
-
-    return res;
 };
+
+// Default export
+module.exports = handler;
 
