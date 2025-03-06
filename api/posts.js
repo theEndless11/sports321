@@ -16,6 +16,7 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
+
 // Handle GET requests to fetch posts and user descriptions
 if (req.method === 'GET') {
     const { username_like, start_timestamp, end_timestamp, username, page, limit } = req.query;
@@ -31,7 +32,7 @@ if (req.method === 'GET') {
     // Fetch posts with timestamp filtering and username search
     if (username_like) {
         sqlQuery += ' WHERE username LIKE ?';
-        queryParams.push(`%${username_like}%`);
+        queryParams.push(%${username_like}%);
     }
 
     if (start_timestamp && end_timestamp) {
@@ -47,42 +48,17 @@ if (req.method === 'GET') {
     try {
         const [results] = await promisePool.execute(sqlQuery, queryParams);
 
-        // Fetch total post count for pagination
-        const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
-        const [totalPostsResult] = await promisePool.execute(totalPostsQuery);
-        const totalPosts = totalPostsResult[0].count;
-        const hasMorePosts = (pageNumber * pageSize) < totalPosts;
-
-        let response = { posts: [], hasMorePosts };
-
-        // Fetch comments for each post from the comments table
-        for (let post of results) {
-            // Fetch the comments for the current post
-            const commentsQuery = 'SELECT * FROM comments WHERE post_id = ? ORDER BY timestamp ASC';
-            const [commentsResults] = await promisePool.execute(commentsQuery, [post._id]);
-
-           // Format comments to match the structure
-const formattedComments = commentsResults.map(comment => ({
-    _id: comment._id,               // Assuming _id is the comment's ID
-    postId: comment.post_id,        // The post ID that the comment belongs to
-    username: comment.username,     // The username of the commenter
-    comment: comment.comment,       // The comment content
-    timestamp: comment.timestamp    // Timestamp for the comment
-}));
-
-
-            // Process the post data (including photo handling)
+        const formattedPosts = results.map(post => {
             let photoUrl = null;
             if (post.photo) {
                 if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
                     photoUrl = post.photo;
                 } else {
-                    photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
+                    photoUrl = data:image/jpeg;base64,${post.photo.toString('base64')};
                 }
             }
 
-            // Prepare the formatted post with its comments
-            response.posts.push({
+            return {
                 _id: post._id,
                 message: post.message,
                 timestamp: post.timestamp,
@@ -92,11 +68,19 @@ const formattedComments = commentsResults.map(comment => ({
                 dislikes: post.dislikes,
                 likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
                 dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
+                comments: post.comments ? JSON.parse(post.comments || '[]') : [],
                 photo: photoUrl,
-                  comments: formattedComments,  // Include the comments for this post
                 profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
-            });
-        }
+            };
+        });
+
+        // Fetch total post count for pagination
+        const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
+        const [totalPostsResult] = await promisePool.execute(totalPostsQuery);
+        const totalPosts = totalPostsResult[0].count;
+        const hasMorePosts = (pageNumber * pageSize) < totalPosts;
+
+        let response = { posts: formattedPosts, hasMorePosts };
 
         // Fetch user description if username is provided
         if (username) {
@@ -112,7 +96,6 @@ const formattedComments = commentsResults.map(comment => ({
         return res.status(500).json({ message: 'Error retrieving posts', error });
     }
 }
-
 
     // Handle POST requests for updating descriptions and profile pictures
     if (req.method === 'POST') {
