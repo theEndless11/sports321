@@ -16,7 +16,6 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
-
 // Handle GET requests to fetch posts and user descriptions
 if (req.method === 'GET') {
     const { username_like, start_timestamp, end_timestamp, username, page, limit } = req.query;
@@ -32,7 +31,7 @@ if (req.method === 'GET') {
     // Fetch posts with timestamp filtering and username search
     if (username_like) {
         sqlQuery += ' WHERE username LIKE ?';
-        queryParams.push(%${username_like}%);
+        queryParams.push(`%${username_like}%`);
     }
 
     if (start_timestamp && end_timestamp) {
@@ -41,8 +40,7 @@ if (req.method === 'GET') {
         queryParams.push(start_timestamp, end_timestamp);
     }
 
-    sqlQuery += ' ORDER BY timestamp DESC';
-    sqlQuery += ' LIMIT ? OFFSET ?'; // Pagination
+    sqlQuery += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?'; // Pagination
     queryParams.push(pageSize, offset);
 
     try {
@@ -54,7 +52,7 @@ if (req.method === 'GET') {
                 if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
                     photoUrl = post.photo;
                 } else {
-                    photoUrl = data:image/jpeg;base64,${post.photo.toString('base64')};
+                    photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
                 }
             }
 
