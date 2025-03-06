@@ -1,8 +1,8 @@
-const { promisePool } = require('../utils/db'); // Assuming promisePool is your MySQL connection pool
+const { promisePool } = require('../utils/db');  // Assuming promisePool is your MySQL connection pool
 
 // Function to set CORS headers
 const setCorsHeaders = (res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*'); // Allow all origins or specify a specific one
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Allow all origins, or specify a specific one (e.g. 'https://example.com')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); // Allow necessary methods
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization'); // Allow necessary headers
     res.setHeader('Access-Control-Allow-Credentials', 'true'); // Enable credentials if needed
@@ -26,7 +26,7 @@ module.exports.handler = async (event, context) => {
         setCorsHeaders(res); // Set CORS headers for actual request
 
         // Query to fetch users and their profile pictures
-        const [users] = await promisePool.execute('SELECT username, profile_picture FROM posts');
+        const [users] = await promisePool.execute('SELECT username, profile_picture FROM users');
 
         // Respond with the list of users
         res.body = JSON.stringify(users);
@@ -38,3 +38,4 @@ module.exports.handler = async (event, context) => {
 
     return res;
 };
+
