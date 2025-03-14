@@ -16,10 +16,9 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
-// Handle GET requests to fetch posts
 // Handle GET requests to fetch posts and user descriptions
 if (req.method === 'GET') {
-    const { username_like, start_timestamp, end_timestamp, username, page, limit, sort } = req.query;
+    const { username_like, start_timestamp, end_timestamp, username, page, limit } = req.query;
 
     let sqlQuery = 'SELECT * FROM posts';
     let queryParams = [];
@@ -41,14 +40,7 @@ if (req.method === 'GET') {
         queryParams.push(start_timestamp, end_timestamp);
     }
 
-    // Add sorting mechanism based on the 'sort' query parameter
-    if (sort === 'popular') {
-        sqlQuery += ' ORDER BY likes DESC';  // Order by number of likes for popular posts
-    } else {
-        sqlQuery += ' ORDER BY timestamp DESC';  // Default order by timestamp for newest posts
-    }
-
-    sqlQuery += ' LIMIT ? OFFSET ?';  // Pagination
+    sqlQuery += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?'; // Pagination
     queryParams.push(pageSize, offset);
 
     try {
@@ -102,7 +94,6 @@ if (req.method === 'GET') {
         return res.status(500).json({ message: 'Error retrieving posts', error });
     }
 }
-
 
     // Handle POST requests for updating descriptions and profile pictures
     if (req.method === 'POST') {
