@@ -16,9 +16,8 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
-// Handle GET requests to fetch posts and user descriptions
 if (req.method === 'GET') {
-    const { username_like, start_timestamp, end_timestamp, username, page, limit } = req.query;
+    const { username_like, start_timestamp, end_timestamp, username, page, limit, sort } = req.query;
 
     let sqlQuery = 'SELECT * FROM posts';
     let queryParams = [];
@@ -40,7 +39,15 @@ if (req.method === 'GET') {
         queryParams.push(start_timestamp, end_timestamp);
     }
 
-    sqlQuery += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?'; // Pagination
+    // Handle sorting
+    if (sort === 'popular') {
+        // Random sorting for now, you can replace this with an actual popularity metric
+        sqlQuery += ' ORDER BY RAND()';
+    } else {
+        sqlQuery += ' ORDER BY timestamp DESC';  // Default to newest posts
+    }
+
+    sqlQuery += ' LIMIT ? OFFSET ?';  // Pagination
     queryParams.push(pageSize, offset);
 
     try {
@@ -68,7 +75,7 @@ if (req.method === 'GET') {
                 dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
                 comments: post.comments ? JSON.parse(post.comments || '[]') : [],
                 photo: photoUrl,
-                profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+                profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
             };
         });
 
@@ -94,6 +101,7 @@ if (req.method === 'GET') {
         return res.status(500).json({ message: 'Error retrieving posts', error });
     }
 }
+
 
     // Handle POST requests for updating descriptions and profile pictures
     if (req.method === 'POST') {
