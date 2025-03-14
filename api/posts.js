@@ -17,6 +17,7 @@ module.exports = async function handler(req, res) {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
 // Handle GET requests to fetch posts
+// Handle GET requests to fetch posts and user descriptions
 if (req.method === 'GET') {
     const { username_like, start_timestamp, end_timestamp, username, page, limit, sort } = req.query;
 
@@ -40,12 +41,11 @@ if (req.method === 'GET') {
         queryParams.push(start_timestamp, end_timestamp);
     }
 
-    // Handle sorting
+    // Add sorting mechanism based on the 'sort' query parameter
     if (sort === 'popular') {
-        // Random sorting for Popular (can be changed to sorting by likes or some other metric)
-        sqlQuery += ' ORDER BY RAND()';  // Random order for now
+        sqlQuery += ' ORDER BY likes DESC';  // Order by number of likes for popular posts
     } else {
-        sqlQuery += ' ORDER BY timestamp DESC';  // Default to Newest
+        sqlQuery += ' ORDER BY timestamp DESC';  // Default order by timestamp for newest posts
     }
 
     sqlQuery += ' LIMIT ? OFFSET ?';  // Pagination
@@ -76,7 +76,7 @@ if (req.method === 'GET') {
                 dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
                 comments: post.comments ? JSON.parse(post.comments || '[]') : [],
                 photo: photoUrl,
-                profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
+                profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
             };
         });
 
@@ -102,6 +102,7 @@ if (req.method === 'GET') {
         return res.status(500).json({ message: 'Error retrieving posts', error });
     }
 }
+
 
     // Handle POST requests for updating descriptions and profile pictures
     if (req.method === 'POST') {
