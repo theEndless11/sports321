@@ -16,6 +16,7 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
+// Handle GET requests to fetch posts
 if (req.method === 'GET') {
     const { username_like, start_timestamp, end_timestamp, username, page, limit, sort } = req.query;
 
@@ -41,10 +42,10 @@ if (req.method === 'GET') {
 
     // Handle sorting
     if (sort === 'popular') {
-        // Random sorting for now, you can replace this with an actual popularity metric
-        sqlQuery += ' ORDER BY RAND()';
+        // Random sorting for Popular (can be changed to sorting by likes or some other metric)
+        sqlQuery += ' ORDER BY RAND()';  // Random order for now
     } else {
-        sqlQuery += ' ORDER BY timestamp DESC';  // Default to newest posts
+        sqlQuery += ' ORDER BY timestamp DESC';  // Default to Newest
     }
 
     sqlQuery += ' LIMIT ? OFFSET ?';  // Pagination
@@ -101,7 +102,6 @@ if (req.method === 'GET') {
         return res.status(500).json({ message: 'Error retrieving posts', error });
     }
 }
-
 
     // Handle POST requests for updating descriptions and profile pictures
     if (req.method === 'POST') {
