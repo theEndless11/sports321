@@ -18,7 +18,7 @@ module.exports = async function handler(req, res) {
     }
 // Handle GET requests to fetch posts and user descriptions
 if (req.method === 'GET') {
-    const { username_like, start_timestamp, end_timestamp, username, page, limit } = req.query;
+    const { username_like, start_timestamp, end_timestamp, username, page, limit, sort } = req.query;
 
     let sqlQuery = 'SELECT * FROM posts';
     let queryParams = [];
@@ -40,7 +40,15 @@ if (req.method === 'GET') {
         queryParams.push(start_timestamp, end_timestamp);
     }
 
-    sqlQuery += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?'; // Pagination
+    // Sort by timestamp (newest) or likes (most liked)
+    if (sort === 'most-liked') {
+        sqlQuery += queryParams.length > 0 ? ' ORDER BY likes DESC' : ' ORDER BY likes DESC';
+    } else {
+        sqlQuery += queryParams.length > 0 ? ' ORDER BY timestamp DESC' : ' ORDER BY timestamp DESC';
+    }
+
+    // Pagination
+    sqlQuery += ' LIMIT ? OFFSET ?';
     queryParams.push(pageSize, offset);
 
     try {
