@@ -40,9 +40,11 @@ if (req.method === 'GET') {
         queryParams.push(start_timestamp, end_timestamp);
     }
 
-    // Sort by timestamp (newest) or likes (most liked)
+    // Sort by Most Liked, Most Comments, or Newest
     if (sort === 'most-liked') {
         sqlQuery += queryParams.length > 0 ? ' ORDER BY likes DESC' : ' ORDER BY likes DESC';
+    } else if (sort === 'most-comments') {
+        sqlQuery += queryParams.length > 0 ? ' ORDER BY comments DESC' : ' ORDER BY comments DESC';
     } else {
         sqlQuery += queryParams.length > 0 ? ' ORDER BY timestamp DESC' : ' ORDER BY timestamp DESC';
     }
