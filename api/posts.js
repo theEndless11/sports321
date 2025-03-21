@@ -90,11 +90,28 @@ if (req.method === 'GET') {
 
         let response = { posts: formattedPosts, hasMorePosts };
 
-        // Fetch user description if username is provided
+        // Fetch user details from users table if username is provided
         if (username) {
+            const userQuery = 'SELECT location, status, profession, hobby FROM users WHERE username = ?';
+            const [userResult] = await promisePool.execute(userQuery, [username]);
+
+            if (userResult.length > 0) {
+                const userData = userResult[0];
+                response.location = userData.location || 'Location not available';
+                response.status = userData.status || 'Status not available';
+                response.profession = userData.profession || 'Profession not available';
+                response.hobby = userData.hobby || 'Hobby not available';
+            } else {
+                response.location = 'Location not available';
+                response.status = 'Status not available';
+                response.profession = 'Profession not available';
+                response.hobby = 'Hobby not available';
+            }
+
+            // Fetch description from posts table
             const descriptionQuery = 'SELECT description FROM posts WHERE username = ?';
-            const [userDescriptionResult] = await promisePool.execute(descriptionQuery, [username]);
-            response.description = userDescriptionResult.length > 0 ? userDescriptionResult[0].description : '';
+            const [descriptionResult] = await promisePool.execute(descriptionQuery, [username]);
+            response.description = descriptionResult.length > 0 ? descriptionResult[0].description : 'No description available';
         }
 
         return res.status(200).json(response);
