@@ -105,7 +105,7 @@ if (req.method === 'GET') {
     }
 }
 
-  // Handle POST requests for updating location, status, profession, hobby, description, and profile picture
+// Handle POST requests for updating location, status, profession, hobby, description, and profile picture
 if (req.method === 'POST') {
     const { username, location, status, profession, hobby, description, profilePicture } = req.body;
 
@@ -137,13 +137,24 @@ if (req.method === 'POST') {
             }
 
             // Add the condition to the end
-            updateFields.push('username = ?');
-            updateValues.push(username);
+            updateValues.push(username);  // Only add the username at the end
 
             const updateQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE username = ?`;
 
             // Execute the update query
             await promisePool.execute(updateQuery, updateValues);
+            return res.status(200).json({ message: 'Profile updated successfully' });
+        }
+
+        // Handle description and profile picture updates if needed
+        if (description || profilePicture) {
+            if (description) {
+                await promisePool.execute('UPDATE posts SET description = ? WHERE username = ?', [description, username]);
+            }
+            if (profilePicture) {
+                await promisePool.execute('UPDATE posts SET profile_picture = ? WHERE username = ?', [profilePicture, username]);
+            }
+
             return res.status(200).json({ message: 'Profile updated successfully' });
         }
 
