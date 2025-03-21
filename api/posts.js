@@ -105,47 +105,72 @@ if (req.method === 'GET') {
     }
 }
 
-    // Handle POST requests for updating descriptions and profile pictures
-    if (req.method === 'POST') {
-        const { username, description, profilePicture } = req.body;
+  // Handle POST requests for updating location, status, profession, hobby, description, and profile picture
+if (req.method === 'POST') {
+    const { username, location, status, profession, hobby, description, profilePicture } = req.body;
 
-        if (!username) {
-            return res.status(400).json({ message: 'Username is required' });
-        }
-
-        try {
-            if (description) {
-                // Ensure the description is not empty
-                if (description.trim() === '') {
-                    return res.status(400).json({ message: 'Description cannot be empty' });
-                }
-
-                // Update the description in the database
-                await promisePool.execute('UPDATE posts SET description = ? WHERE username = ?', [description, username]);
-                return res.status(200).json({ message: 'Description updated successfully' });
-            }
-
-            if (profilePicture) {
-                // Update the user's profile picture in the posts table
-                const [result] = await promisePool.execute(
-                    'UPDATE posts SET profile_picture = ? WHERE username = ?',
-                    [profilePicture, username]
-                );
-
-                if (result.affectedRows === 0) {
-                    return res.status(404).json({ message: 'User not found' });
-                }
-
-                return res.status(200).json({ message: 'Profile picture updated successfully' });
-            }
-
-            return res.status(400).json({ message: 'No valid data provided to update' });
-        } catch (error) {
-            console.error('❌ Error updating profile:', error);
-            return res.status(500).json({ message: 'Error updating profile', error });
-        }
+    if (!username) {
+        return res.status(400).json({ message: 'Username is required' });
     }
 
+    try {
+        // Update the location, status, profession, and hobby in the users table
+        if (location || status || profession || hobby) {
+            const updateFields = [];
+            const updateValues = [];
+
+            if (location) {
+                updateFields.push('location = ?');
+                updateValues.push(location);
+            }
+            if (status) {
+                updateFields.push('status = ?');
+                updateValues.push(status);
+            }
+            if (profession) {
+                updateFields.push('profession = ?');
+                updateValues.push(profession);
+            }
+            if (hobby) {
+                updateFields.push('hobby = ?');
+                updateValues.push(hobby);
+            }
+
+            // Add the condition to the end
+            updateFields.push('username = ?');
+            updateValues.push(username);
+
+            const updateQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE username = ?`;
+
+            // Execute the update query
+            await promisePool.execute(updateQuery, updateValues);
+            return res.status(200).json({ message: 'Profile updated successfully' });
+        }
+
+        // If description is provided, update in posts table
+        if (description) {
+            if (description.trim() === '') {
+                return res.status(400).json({ message: 'Description cannot be empty' });
+            }
+            await promisePool.execute('UPDATE posts SET description = ? WHERE username = ?', [description, username]);
+            return res.status(200).json({ message: 'Description updated successfully' });
+        }
+
+        // If profile picture is provided, update in posts table
+        if (profilePicture) {
+            const [result] = await promisePool.execute('UPDATE posts SET profile_picture = ? WHERE username = ?', [profilePicture, username]);
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+            return res.status(200).json({ message: 'Profile picture updated successfully' });
+        }
+
+        return res.status(400).json({ message: 'No valid data provided to update' });
+    } catch (error) {
+        console.error('❌ Error updating profile:', error);
+        return res.status(500).json({ message: 'Error updating profile', error });
+    }
+}
     // Handle unsupported methods
     return res.status(405).json({ message: 'Method Not Allowed' });
 };
