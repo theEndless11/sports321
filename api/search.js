@@ -17,23 +17,32 @@ module.exports = async function handler(req, res) {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
 
-// Handle GET requests to search posts and fetch user details
+// Handle GET requests to search posts, fetch user details, and provide username suggestions
 if (req.method === 'GET') {
     const { username } = req.query;
 
-    // Check if username is provided
+    // If username is not provided, return username suggestions
     if (!username) {
         return res.status(400).json({ message: 'Username is required' });
     }
 
     try {
-        // Fetch user details (excluding profile_picture) from the users table
-        const userQuery = 'SELECT location, status, profession, hobby FROM users WHERE username = ?';
+        // Fetch user details from the users table
+        const userQuery = 'SELECT location, status, profession, hobby, profile_picture FROM users WHERE username = ?';
         const [userResult] = await promisePool.execute(userQuery, [username]);
 
         // If no user is found, return 404
         if (userResult.length === 0) {
-            return res.status(404).json({ message: 'User not found' });
+            // Suggest usernames if not found
+            const suggestionsQuery = 'SELECT username, profile_picture FROM users WHERE username LIKE ? LIMIT 5';
+            const [suggestionsResult] = await promisePool.execute(suggestionsQuery, [`${username}%`]);
+
+            const suggestions = suggestionsResult.map(user => ({
+                username: user.username,
+                profile_picture: user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp2.jpg' // Default profile picture if not available
+            }));
+
+            return res.status(200).json({ suggestions });
         }
 
         const user = userResult[0];
@@ -70,7 +79,7 @@ if (req.method === 'GET') {
             };
         });
 
-        // Prepare response with user details (excluding profile_picture) and posts
+        // Prepare response with user details and posts
         const response = {
             user: {
                 username: username,
