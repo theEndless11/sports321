@@ -79,7 +79,7 @@ if (req.method === 'GET') {
             };
         });
 
-        // Prepare response with user details and posts
+  // Prepare response with user details (excluding profile_picture) and posts
         const response = {
             user: {
                 username: username,
@@ -102,3 +102,4 @@ if (req.method === 'GET') {
         return res.status(405).json({ message: 'Method Not Allowed' });
     }
 };
+
