@@ -33,7 +33,7 @@ if (req.method === 'GET') {
         // If no user is found, return 404
         if (userResult.length === 0) {
             // Suggest usernames if not found
-            const suggestionsQuery = 'SELECT username, profile_picture FROM users WHERE username LIKE ? LIMIT 5';
+            const suggestionsQuery = 'SELECT username, profile_picture FROM posts WHERE username LIKE ? LIMIT 5';
             const [suggestionsResult] = await promisePool.execute(suggestionsQuery, [`${username}%`]);
 
             const suggestions = suggestionsResult.map(user => ({
