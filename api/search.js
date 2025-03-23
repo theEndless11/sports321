@@ -27,10 +27,9 @@ if (req.method === 'GET') {
     }
 
     try {
-        // Fetch user details from the users table
-        const userQuery = 'SELECT location, status, profession, hobby, profile_picture FROM users WHERE username = ?';
+          // Fetch user details (excluding profile_picture) from the users table
+        const userQuery = 'SELECT location, status, profession, hobby FROM users WHERE username = ?';
         const [userResult] = await promisePool.execute(userQuery, [username]);
-
         // If no user is found, return 404
         if (userResult.length === 0) {
             // Suggest usernames if not found
