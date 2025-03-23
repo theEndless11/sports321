@@ -27,8 +27,8 @@ if (req.method === 'GET') {
     }
 
     try {
-        // Fetch user details from users table
-        const userQuery = 'SELECT location, status, profession, hobby, profile_picture FROM users WHERE username = ?';
+        // Fetch user details (excluding profile_picture) from the users table
+        const userQuery = 'SELECT location, status, profession, hobby FROM users WHERE username = ?';
         const [userResult] = await promisePool.execute(userQuery, [username]);
 
         // If no user is found, return 404
@@ -38,7 +38,7 @@ if (req.method === 'GET') {
 
         const user = userResult[0];
 
-        // Fetch posts from posts table
+        // Fetch posts from posts table (including profile_picture and description)
         const postsQuery = 'SELECT _id, message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, profile_picture, description FROM posts WHERE username = ?';
         const [postsResult] = await promisePool.execute(postsQuery, [username]);
 
@@ -70,7 +70,7 @@ if (req.method === 'GET') {
             };
         });
 
-        // Prepare response with user details and posts
+        // Prepare response with user details (excluding profile_picture) and posts
         const response = {
             user: {
                 username: username,
@@ -78,7 +78,7 @@ if (req.method === 'GET') {
                 status: user.status || 'Status not available',
                 profession: user.profession || 'Profession not available',
                 hobby: user.hobby || 'Hobby not available',
-                profile_picture: user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture if not available
+                profile_picture: postsResult.length > 0 ? postsResult[0].profile_picture || 'https://latestnewsandaffairs.site/public/pfp3.jpg' : 'https://latestnewsandaffairs.site/public/pfp2.jpg', // Fetch profile picture from posts
             },
             posts: formattedPosts,
         };
@@ -89,7 +89,7 @@ if (req.method === 'GET') {
         console.error("❌ Error searching user and posts:", error);
         return res.status(500).json({ message: 'Error retrieving user and posts', error });
     }
-} else {
+}  else {
         return res.status(405).json({ message: 'Method Not Allowed' });
     }
 };
