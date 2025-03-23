@@ -90,6 +90,6 @@ if (req.method === 'GET') {
         return res.status(500).json({ message: 'Error retrieving user and posts', error });
     }
 } else {
-    // Handle unsupported HTTP methods
-    return res.status(405).json({ message: 'Method Not Allowed' });
-}
+        return res.status(405).json({ message: 'Method Not Allowed' });
+    }
+};
