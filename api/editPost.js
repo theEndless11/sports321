@@ -77,14 +77,22 @@ module.exports = async function handler(req, res) {
 
         // Handle the "heart" action
         } else if (action === 'heart') {
-            if (post.heartedBy.includes(username)) {
-                post.hearts -= 1; // Remove heart and decrement heart count
-                post.heartedBy = post.heartedBy.filter(user => user !== username);
-            } else {
-                post.hearts += 1; // Add heart and increment heart count
-                post.heartedBy.push(username);
-            }
+    // Find the comment that the user wants to heart
+    const commentIndex = post.comments.findIndex(c => c.username === commentUsername && c.comment === comment);
+    if (commentIndex !== -1) {
+        const comment = post.comments[commentIndex];
 
+        // If the user has already hearted this comment, remove their heart
+        if (comment.heartedBy.includes(username)) {
+            comment.hearts -= 1; // Decrement heart count
+            comment.heartedBy = comment.heartedBy.filter(user => user !== username);
+        } else {
+            // If the user has not hearted the comment yet, add their heart
+            comment.hearts += 1; // Increment heart count
+            comment.heartedBy.push(username);
+        }
+    }
+}
         // Handle the "comment" action
         } else if (action === 'comment') {
             if (!comment || !comment.trim()) {
