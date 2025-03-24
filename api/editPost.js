@@ -53,14 +53,14 @@ module.exports = async function handler(req, res) {
             }
             shouldUpdateDB = true;
         }
-        // ✅ Handle the "dislike" action (COUNT ONLY, NOT STORED AS USERS)
+        // ✅ Handle the "dislike" action (COUNT ONLY, STORED IN DB)
         else if (action === 'dislike') {
-            post.dislikes += 1; // ✅ Just increments the count
+            post.dislikes += 1;
             shouldUpdateDB = true;
         }
-        // ✅ Handle the "heart" action (COUNT ONLY, NOT STORED AS USERS)
+        // ✅ Handle the "heart" action (COUNT ONLY, STORED IN DB)
         else if (action === 'heart') {
-            post.hearts += 1; // ✅ Just increments the count
+            post.hearts += 1;
             shouldUpdateDB = true;
         }
         // ✅ Handle the "comment" action
@@ -95,7 +95,7 @@ module.exports = async function handler(req, res) {
                 [
                     post.likes,
                     post.dislikes,
-                    post.hearts,
+                    post.hearts, // ✅ Now storing hearts in DB
                     JSON.stringify(post.likedBy), // Store `likedBy` in DB
                     JSON.stringify(post.comments),
                     postId
@@ -111,3 +111,4 @@ module.exports = async function handler(req, res) {
         res.status(500).json({ message: 'Error updating post', error });
     }
 };
+
