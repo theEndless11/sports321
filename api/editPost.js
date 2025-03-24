@@ -106,11 +106,13 @@ try {
         ]
     );
 
-    res.status(200).json(post);  // Respond with the updated post
+     // Return the updated post as a response
+        res.status(200).json(post);
 
-} catch (error) {
-    console.error("Error updating post:", error);
-    res.status(500).json({ message: 'Error updating post', error });
+    } catch (error) {
+        console.error("Error updating post:", error);
+        res.status(500).json({ message: 'Error updating post', error });
+    }
 }
 
 
