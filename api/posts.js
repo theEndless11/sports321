@@ -65,22 +65,23 @@ module.exports = async function handler(req, res) {
                         photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
                     }
                 }
-return {
-    _id: post._id,
-    message: post.message,
-    timestamp: post.timestamp,
-    username: post.username,
-    sessionId: post.sessionId,
-    likes: post.likes,
-    dislikes: post.dislikes,
-    likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
-    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
-    hearts: post.hearts,
-    heartedBy: post.heartedBy ? JSON.parse(post.heartedBy || '[]') : [], // Corrected line
-    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
-    photo: photoUrl,
-    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
-};
+    // Prepare and return the updated post structure
+    return {
+        _id: post._id,
+        message: post.message,
+        timestamp: post.timestamp,
+        username: post.username,
+        sessionId: post.sessionId,
+        likes: post.likes,
+        dislikes: post.dislikes,
+        likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
+        dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
+        hearts: post.hearts,
+        heartedBy: post.heartedBy ? JSON.parse(post.heartedBy || '[]') : [], // Include the updated heartedBy list
+        comments: post.comments ? JSON.parse(post.comments || '[]') : [], // Include updated comments with hearts
+        photo: photoUrl,
+        profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+    };
       });
 
             // Fetch total post count for pagination
