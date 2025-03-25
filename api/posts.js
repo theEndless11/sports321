@@ -65,8 +65,8 @@ if (req.method === 'GET') {
                     photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
                 }
             }
-
- return {
+// Ensure each comment has a unique identifier when fetching posts
+return {
     _id: post._id,
     message: post.message,
     timestamp: post.timestamp,
@@ -78,10 +78,19 @@ if (req.method === 'GET') {
     dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
     hearts: post.hearts,
     heartedBy: post.heartedBy ? JSON.parse(post.heartedBy || '[]') : [], // Corrected line
-    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
+    comments: post.comments ? JSON.parse(post.comments || '[]').map(comment => ({
+        ...comment,
+        commentId: comment.commentId || generateUniqueId()  // Ensure each comment has a unique ID
+    })) : [],
     photo: photoUrl,
     profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
 };
+
+// Function to generate a unique identifier for comments if not already present
+function generateUniqueId() {
+    // Generate a UUID for each comment or use any other method to create a unique identifier
+    return 'comment-' + Math.random().toString(36).substr(2, 9);
+}
 
         });
 
