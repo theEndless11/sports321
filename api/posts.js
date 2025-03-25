@@ -65,9 +65,7 @@ module.exports = async function handler(req, res) {
                         photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
                     }
                 }
-
-            // Example of returning a post with updated comment structure
-return {
+            return {
     _id: post._id,
     message: post.message,
     timestamp: post.timestamp,
@@ -76,12 +74,11 @@ return {
     likes: post.likes,
     dislikes: post.dislikes,
     likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
-    hearts: post.hearts || 0, // Ensuring hearts count is properly assigned
-    comments: post.comments ? JSON.parse(post.comments || '[]') : [], // Updated comment array with commentId
+    hearts: post.hearts || 0,
+    comments: post.comments,  // The commentId is now inside each comment in the array
     photo: photoUrl,
-    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture
 };
-
             });
 
             // Fetch total post count for pagination
