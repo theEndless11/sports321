@@ -75,7 +75,8 @@ module.exports = async function handler(req, res) {
             shouldUpdateDB = true;
         }
 else if (action === 'heart') {
-    const comment = post.comments.find(comment => comment.commentId === commentId);
+    const comment = post.comments.find(comment => String(comment.commentId) === String(commentId)); // Ensure comparison with the same type
+
     if (comment) {
         if (comment.heartedBy.includes(username)) {
             comment.hearts -= 1;
@@ -91,8 +92,9 @@ else if (action === 'heart') {
         // Save the updated post to the database
     }
 
-    res.json(post); // Return the entire post including updated hearts
+    res.json(post); // Return the entire post including updated hearts and comments
 }
+
         // ✅ Handle "comment" action
         else if (action === 'comment') {
             if (!comment || !comment.trim()) {
