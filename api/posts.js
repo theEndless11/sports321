@@ -65,7 +65,7 @@ module.exports = async function handler(req, res) {
                         photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
                     }
                 }
-            return {
+return {
     _id: post._id,
     message: post.message,
     timestamp: post.timestamp,
@@ -74,12 +74,14 @@ module.exports = async function handler(req, res) {
     likes: post.likes,
     dislikes: post.dislikes,
     likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
-    hearts: post.hearts || 0,
-    comments: post.comments ? post.comments : [], // Ensure this is always an array
+    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
+    hearts: post.hearts,
+    heartedBy: post.heartedBy ? JSON.parse(post.heartedBy || '[]') : [], // Corrected line
+    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
     photo: photoUrl,
-    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture
+    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
 };
-            });
+      });
 
             // Fetch total post count for pagination
             const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
