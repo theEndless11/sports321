@@ -77,7 +77,7 @@ module.exports = async function handler(req, res) {
             }
         }
 
-   // Handle the "comment" action
+// Handle the "comment" action
 } else if (action === 'comment') {
     if (!comment || !comment.trim()) {
         return res.status(400).json({ message: 'Comment cannot be empty' });
@@ -92,6 +92,13 @@ module.exports = async function handler(req, res) {
         username,           // Username of the person commenting
         comment,            // The text of the comment
         timestamp          // Timestamp when the comment was made
+    });
+
+    // Send back the commentId and the newly created comment
+    return res.status(200).json({
+        message: 'Comment added successfully',
+        newCommentId: commentId, // Send back the new commentId
+        comment: { commentId, username, comment, timestamp }
     });
 
 } else {
