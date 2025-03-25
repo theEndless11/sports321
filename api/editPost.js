@@ -37,7 +37,6 @@ module.exports = async function handler(req, res) {
         // ✅ Ensure JSON fields are properly parsed
         post.likedBy = JSON.parse(post.likedBy || '[]');
         post.dislikedBy = JSON.parse(post.dislikedBy || '[]');
-        post.heartedBy = JSON.parse(post.heartedBy || '[]'); 
         post.comments = JSON.parse(post.comments || '[]');
 
         let shouldUpdateDB = false; // ✅ Prevent unnecessary database updates
@@ -74,27 +73,27 @@ module.exports = async function handler(req, res) {
             }
             shouldUpdateDB = true;
         }
-else if (action === 'heart') {
-    const comment = post.comments.find(comment => String(comment.commentId) === String(commentId)); // Ensure comparison with the same type
+        // ✅ Handle "heart" action
+        else if (action === 'heart') {
+            const targetComment = post.comments.find(c => String(c.commentId) === String(commentId));
 
-    if (comment) {
-        if (comment.heartedBy.includes(username)) {
-            comment.hearts -= 1;
-            comment.heartedBy = comment.heartedBy.filter(user => user !== username);
-        } else {
-            comment.hearts += 1;
-            comment.heartedBy.push(username);
+            if (targetComment) {
+                // Ensure `heartedBy` is always an array
+                targetComment.heartedBy = Array.isArray(targetComment.heartedBy) ? targetComment.heartedBy : [];
+                targetComment.hearts = targetComment.hearts || 0;
+
+                if (targetComment.heartedBy.includes(username)) {
+                    targetComment.hearts -= 1;
+                    targetComment.heartedBy = targetComment.heartedBy.filter(user => user !== username);
+                } else {
+                    targetComment.hearts += 1;
+                    targetComment.heartedBy.push(username);
+                }
+                shouldUpdateDB = true;
+            } else {
+                return res.status(404).json({ message: 'Comment not found to heart' });
+            }
         }
-        shouldUpdateDB = true;
-    }
-
-    if (shouldUpdateDB) {
-        // Save the updated post to the database
-    }
-
-    res.json(post); // Return the entire post including updated hearts and comments
-}
-
         // ✅ Handle "comment" action
         else if (action === 'comment') {
             if (!comment || !comment.trim()) {
@@ -107,6 +106,8 @@ else if (action === 'heart') {
                 username,
                 comment,
                 timestamp: new Date(),
+                hearts: 0,
+                heartedBy: [],
                 replies: []
             });
             shouldUpdateDB = true;
@@ -126,7 +127,7 @@ else if (action === 'heart') {
                 });
                 shouldUpdateDB = true;
             } else {
-                return res.status(400).json({ message: 'Comment not found to reply to' });
+                return res.status(404).json({ message: 'Comment not found to reply to' });
             }
         } else {
             return res.status(400).json({ message: 'Invalid action type' });
@@ -135,14 +136,12 @@ else if (action === 'heart') {
         // ✅ Update the database if needed
         if (shouldUpdateDB) {
             await promisePool.execute(
-                `UPDATE posts SET likes = ?, dislikes = ?, likedBy = ?, dislikedBy = ?, hearts = ?, heartedBy = ?, comments = ? WHERE _id = ?`,
+                `UPDATE posts SET likes = ?, dislikes = ?, likedBy = ?, dislikedBy = ?, comments = ? WHERE _id = ?`,
                 [
                     post.likes,
                     post.dislikes,
                     JSON.stringify(post.likedBy),
                     JSON.stringify(post.dislikedBy),
-                    post.hearts,
-                    JSON.stringify(post.heartedBy),
                     JSON.stringify(post.comments),
                     postId
                 ]
@@ -157,6 +156,7 @@ else if (action === 'heart') {
         res.status(500).json({ message: 'Error updating post', error });
     }
 };
+
 
 
 
