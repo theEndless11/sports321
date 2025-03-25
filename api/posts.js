@@ -1,4 +1,3 @@
-// Use require instead of import
 const { promisePool } = require('../utils/db'); // MySQL connection pool
 
 // Set CORS headers for all methods
@@ -16,111 +15,112 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
-// Handle GET requests to fetch posts and user descriptions
-if (req.method === 'GET') {
-    const { username_like, start_timestamp, end_timestamp, username, page, limit, sort } = req.query;
 
-    let sqlQuery = 'SELECT * FROM posts';
-    let queryParams = [];
+    // Handle GET requests to fetch posts and user descriptions
+    if (req.method === 'GET') {
+        const { username_like, start_timestamp, end_timestamp, username, page, limit, sort } = req.query;
 
-    // Pagination logic
-    const pageNumber = parseInt(page, 10) || 1;  // Default to page 1
-    const pageSize = parseInt(limit, 10) || 5;   // Default to 5 posts per page
-    const offset = (pageNumber - 1) * pageSize;
+        let sqlQuery = 'SELECT * FROM posts';
+        let queryParams = [];
 
-    // Fetch posts with timestamp filtering and username search
-    if (username_like) {
-        sqlQuery += ' WHERE username LIKE ?';
-        queryParams.push(`%${username_like}%`);
-    }
+        // Pagination logic
+        const pageNumber = parseInt(page, 10) || 1;  // Default to page 1
+        const pageSize = parseInt(limit, 10) || 5;   // Default to 5 posts per page
+        const offset = (pageNumber - 1) * pageSize;
 
-    if (start_timestamp && end_timestamp) {
-        sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
-        sqlQuery += ' timestamp BETWEEN ? AND ?';
-        queryParams.push(start_timestamp, end_timestamp);
-    }
-
-    // Sort by Most Liked, Most Comments, or Newest
-    if (sort === 'most-liked') {
-        sqlQuery += queryParams.length > 0 ? ' ORDER BY likes DESC' : ' ORDER BY likes DESC';
-    } else if (sort === 'most-comments') {
-        sqlQuery += queryParams.length > 0 ? ' ORDER BY comments DESC' : ' ORDER BY comments DESC';
-    } else {
-        sqlQuery += queryParams.length > 0 ? ' ORDER BY timestamp DESC' : ' ORDER BY timestamp DESC';
-    }
-
-    // Pagination
-    sqlQuery += ' LIMIT ? OFFSET ?';
-    queryParams.push(pageSize, offset);
-
-    try {
-        const [results] = await promisePool.execute(sqlQuery, queryParams);
-
-        const formattedPosts = results.map(post => {
-            let photoUrl = null;
-            if (post.photo) {
-                if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
-                    photoUrl = post.photo;
-                } else {
-                    photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
-                }
-            }
-// Ensure each comment has a unique identifier when fetching posts
-return {
-    _id: post._id,
-    message: post.message,
-    timestamp: post.timestamp,
-    username: post.username,
-    sessionId: post.sessionId,
-    likes: post.likes,
-    dislikes: post.dislikes,
-    likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
-    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
-    hearts: post.hearts,
-    heartedBy: post.heartedBy ? JSON.parse(post.heartedBy || '[]') : [], // Corrected line
-    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
-    photo: photoUrl,
-    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
-};
-    // Fetch total post count for pagination
-        const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
-        const [totalPostsResult] = await promisePool.execute(totalPostsQuery);
-        const totalPosts = totalPostsResult[0].count;
-        const hasMorePosts = (pageNumber * pageSize) < totalPosts;
-
-        let response = { posts: formattedPosts, hasMorePosts };
-
-        // Fetch user details from users table if username is provided
-        if (username) {
-            const userQuery = 'SELECT location, status, profession, hobby FROM users WHERE username = ?';
-            const [userResult] = await promisePool.execute(userQuery, [username]);
-
-            if (userResult.length > 0) {
-                const userData = userResult[0];
-                response.location = userData.location || 'Location not available';
-                response.status = userData.status || 'Status not available';
-                response.profession = userData.profession || 'Profession not available';
-                response.hobby = userData.hobby || 'Hobby not available';
-            } else {
-                response.location = 'Location not available';
-                response.status = 'Status not available';
-                response.profession = 'Profession not available';
-                response.hobby = 'Hobby not available';
-            }
-
-            // Fetch description from posts table
-            const descriptionQuery = 'SELECT description FROM posts WHERE username = ?';
-            const [descriptionResult] = await promisePool.execute(descriptionQuery, [username]);
-            response.description = descriptionResult.length > 0 ? descriptionResult[0].description : 'No description available';
+        // Apply username filter
+        if (username_like) {
+            sqlQuery += ' WHERE username LIKE ?';
+            queryParams.push(`%${username_like}%`);
         }
 
-        return res.status(200).json(response);
+        // Apply timestamp filter
+        if (start_timestamp && end_timestamp) {
+            sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
+            sqlQuery += ' timestamp BETWEEN ? AND ?';
+            queryParams.push(start_timestamp, end_timestamp);
+        }
 
-    } catch (error) {
-        console.error("❌ Error retrieving posts:", error);
-        return res.status(500).json({ message: 'Error retrieving posts', error });
+        // Sorting logic
+        const sortOptions = {
+            'most-liked': 'likes DESC',
+            'most-comments': 'CHAR_LENGTH(comments) DESC', // Sort based on comment length
+            'newest': 'timestamp DESC'
+        };
+        sqlQuery += ` ORDER BY ${sortOptions[sort] || 'timestamp DESC'}`;
+
+        // Pagination
+        sqlQuery += ' LIMIT ? OFFSET ?';
+        queryParams.push(pageSize, offset);
+
+        try {
+            const [results] = await promisePool.execute(sqlQuery, queryParams);
+
+            const formattedPosts = results.map(post => {
+                let photoUrl = null;
+                if (post.photo) {
+                    if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
+                        photoUrl = post.photo;
+                    } else {
+                        photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
+                    }
+                }
+
+                return {
+                    _id: post._id,
+                    message: post.message,
+                    timestamp: post.timestamp,
+                    username: post.username,
+                    sessionId: post.sessionId,
+                    likes: post.likes,
+                    dislikes: post.dislikes,
+                    likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
+                    hearts: post.hearts || 0, // Ensuring hearts count is properly assigned
+                    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
+                    photo: photoUrl,
+                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+                };
+            });
+
+            // Fetch total post count for pagination
+            const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
+            const [totalPostsResult] = await promisePool.execute(totalPostsQuery);
+            const totalPosts = totalPostsResult[0].count;
+            const hasMorePosts = (pageNumber * pageSize) < totalPosts;
+
+            let response = { posts: formattedPosts, hasMorePosts };
+
+            // Fetch user details from users table if username is provided
+            if (username) {
+                const userQuery = 'SELECT location, status, profession, hobby FROM users WHERE username = ?';
+                const [userResult] = await promisePool.execute(userQuery, [username]);
+
+                if (userResult.length > 0) {
+                    const userData = userResult[0];
+                    response.location = userData.location || 'Location not available';
+                    response.status = userData.status || 'Status not available';
+                    response.profession = userData.profession || 'Profession not available';
+                    response.hobby = userData.hobby || 'Hobby not available';
+                } else {
+                    response.location = 'Location not available';
+                    response.status = 'Status not available';
+                    response.profession = 'Profession not available';
+                    response.hobby = 'Hobby not available';
+                }
+
+                // Fetch description from posts table
+                const descriptionQuery = 'SELECT description FROM posts WHERE username = ?';
+                const [descriptionResult] = await promisePool.execute(descriptionQuery, [username]);
+                response.description = descriptionResult.length > 0 ? descriptionResult[0].description : 'No description available';
+            }
+
+            return res.status(200).json(response);
+
+        } catch (error) {
+            console.error("❌ Error retrieving posts:", error);
+            return res.status(500).json({ message: 'Error retrieving posts', error });
+        }
     }
-}
 
 // Handle POST requests for updating location, status, profession, hobby, description, and profile picture
 if (req.method === 'POST') {
