@@ -73,12 +73,14 @@ module.exports = async function handler(req, res) {
             }
             shouldUpdateDB = true;
         }
-      // ✅ Handle "heart" action (Hearting a specific comment inside a post)
+ // ✅ Handle "heart" action (Hearting a specific comment inside a post)
 else if (action === 'heart') {
     // Find the target comment by `commentId`
-    const targetComment = post.comments.find(c => String(c.commentId) === String(commentId));
+    const targetCommentIndex = post.comments.findIndex(c => String(c.commentId) === String(commentId));
 
-    if (targetComment) {
+    if (targetCommentIndex !== -1) {
+        const targetComment = post.comments[targetCommentIndex];
+
         // Ensure `heartedBy` is always an array
         targetComment.heartedBy = Array.isArray(targetComment.heartedBy) ? targetComment.heartedBy : [];
         targetComment.hearts = targetComment.hearts || 0;
@@ -93,11 +95,15 @@ else if (action === 'heart') {
             targetComment.heartedBy.push(username);
         }
 
+        // ✅ Update the comment inside the `post.comments` array
+        post.comments[targetCommentIndex] = targetComment;
+
         shouldUpdateDB = true;
     } else {
         return res.status(404).json({ message: 'Comment not found to heart' });
     }
 }
+
 
 // ✅ Handle "comment" action (Adding a new comment to a post)
 else if (action === 'comment') {
