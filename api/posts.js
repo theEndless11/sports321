@@ -78,23 +78,11 @@ return {
     dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
     hearts: post.hearts,
     heartedBy: post.heartedBy ? JSON.parse(post.heartedBy || '[]') : [], // Corrected line
-    comments: post.comments ? JSON.parse(post.comments || '[]').map(comment => ({
-        ...comment,
-        commentId: comment.commentId || generateUniqueId()  // Ensure each comment has a unique ID
-    })) : [],
+        comments: post.comments ? JSON.parse(post.comments || '[]') : [],
     photo: photoUrl,
     profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
 };
-
-// Function to generate a unique identifier for comments if not already present
-function generateUniqueId() {
-    // Generate a UUID for each comment or use any other method to create a unique identifier
-    return 'comment-' + Math.random().toString(36).substr(2, 9);
-}
-
-        });
-
-        // Fetch total post count for pagination
+    // Fetch total post count for pagination
         const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
         const [totalPostsResult] = await promisePool.execute(totalPostsQuery);
         const totalPosts = totalPostsResult[0].count;
