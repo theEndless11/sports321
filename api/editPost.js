@@ -87,6 +87,13 @@ else if (action === 'heart') {
         }
         shouldUpdateDB = true;
     }
+
+    if (shouldUpdateDB) {
+        // Save the updated post to the database here (not shown)
+    }
+
+    // Respond with the updated post
+    res.json(post); // Return the entire post, including updated hearts
 }
 
         // ✅ Handle "comment" action
