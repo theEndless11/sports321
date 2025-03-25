@@ -73,45 +73,58 @@ module.exports = async function handler(req, res) {
             }
             shouldUpdateDB = true;
         }
-        // ✅ Handle "heart" action
-        else if (action === 'heart') {
-            const targetComment = post.comments.find(c => String(c.commentId) === String(commentId));
+      // ✅ Handle "heart" action (Hearting a specific comment inside a post)
+else if (action === 'heart') {
+    // Find the target comment by `commentId`
+    const targetComment = post.comments.find(c => String(c.commentId) === String(commentId));
 
-            if (targetComment) {
-                // Ensure `heartedBy` is always an array
-                targetComment.heartedBy = Array.isArray(targetComment.heartedBy) ? targetComment.heartedBy : [];
-                targetComment.hearts = targetComment.hearts || 0;
+    if (targetComment) {
+        // Ensure `heartedBy` is always an array
+        targetComment.heartedBy = Array.isArray(targetComment.heartedBy) ? targetComment.heartedBy : [];
+        targetComment.hearts = targetComment.hearts || 0;
 
-                if (targetComment.heartedBy.includes(username)) {
-                    targetComment.hearts -= 1;
-                    targetComment.heartedBy = targetComment.heartedBy.filter(user => user !== username);
-                } else {
-                    targetComment.hearts += 1;
-                    targetComment.heartedBy.push(username);
-                }
-                shouldUpdateDB = true;
-            } else {
-                return res.status(404).json({ message: 'Comment not found to heart' });
-            }
+        if (targetComment.heartedBy.includes(username)) {
+            // Remove heart
+            targetComment.hearts -= 1;
+            targetComment.heartedBy = targetComment.heartedBy.filter(user => user !== username);
+        } else {
+            // Add heart
+            targetComment.hearts += 1;
+            targetComment.heartedBy.push(username);
         }
-        // ✅ Handle "comment" action
-        else if (action === 'comment') {
-            if (!comment || !comment.trim()) {
-                return res.status(400).json({ message: 'Comment cannot be empty' });
-            }
 
-            const newCommentId = commentId || uuidv4(); // ✅ Generate a new ID if not provided
-            post.comments.push({
-                commentId: newCommentId,
-                username,
-                comment,
-                timestamp: new Date(),
-                hearts: 0,
-                heartedBy: [],
-                replies: []
-            });
-            shouldUpdateDB = true;
-        }
+        shouldUpdateDB = true;
+    } else {
+        return res.status(404).json({ message: 'Comment not found to heart' });
+    }
+}
+
+// ✅ Handle "comment" action (Adding a new comment to a post)
+else if (action === 'comment') {
+    if (!comment || !comment.trim()) {
+        return res.status(400).json({ message: 'Comment cannot be empty' });
+    }
+
+    // Generate a new `commentId` if not provided
+    const newCommentId = commentId || uuidv4();
+
+    // Create a new comment object
+    const newComment = {
+        commentId: newCommentId,
+        username,
+        comment,
+        timestamp: new Date(),
+        hearts: 0,
+        heartedBy: [], // Store users who hearted this comment
+        replies: []
+    };
+
+    // Add new comment to the post's `comments` array
+    post.comments.push(newComment);
+
+    shouldUpdateDB = true;
+}
+
         // ✅ Handle "reply" action
         else if (action === 'reply') {
             if (!reply || !reply.trim()) {
