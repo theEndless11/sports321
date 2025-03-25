@@ -75,7 +75,7 @@ module.exports = async function handler(req, res) {
     dislikes: post.dislikes,
     likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
     hearts: post.hearts || 0,
-    comments: post.comments,  // The commentId is now inside each comment in the array
+    comments: post.comments ? post.comments : [], // Ensure this is always an array
     photo: photoUrl,
     profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture
 };
