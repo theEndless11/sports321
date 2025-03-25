@@ -77,25 +77,26 @@ module.exports = async function handler(req, res) {
             }
         }
 
-        // Handle the "comment" action
-        else if (action === 'comment') {
-            if (!comment || !comment.trim()) {
-                return res.status(400).json({ message: 'Comment cannot be empty' });
-            }
+   // Handle the "comment" action
+} else if (action === 'comment') {
+    if (!comment || !comment.trim()) {
+        return res.status(400).json({ message: 'Comment cannot be empty' });
+    }
 
-            // Generate a unique commentId for the new comment
-            const newComment = {
-                commentId: generateCommentId(), // Generate unique ID
-                username,
-                comment,
-                timestamp: new Date(),
-                replies: [],
-                hearts: 0, // Initialize hearts count
-                heartedBy: [] // Track who has hearted the comment
-            };
+    const commentId = generateUUID(); // Generate a unique comment ID
+    const timestamp = new Date(); // Timestamp for when the comment is created
 
-            post.comments.push(newComment);
-        }
+    // Add the comment object with its ID, timestamp, and username
+    post.comments.push({
+        commentId,          // Unique comment ID
+        username,           // Username of the person commenting
+        comment,            // The text of the comment
+        timestamp          // Timestamp when the comment was made
+    });
+
+} else {
+    return res.status(400).json({ message: 'Invalid action type' });
+}
 
         // Handle the "reply" action
         else if (action === 'reply') {
