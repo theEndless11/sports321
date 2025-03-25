@@ -93,11 +93,19 @@ module.exports = async function handler(req, res) {
 
         // Handle the "comment" action
         } else if (action === 'comment') {
-            if (!comment || !comment.trim()) {
-                return res.status(400).json({ message: 'Comment cannot be empty' });
-            }
-            post.comments.push({ username, comment, timestamp: new Date(), replies: [] });
+    if (!comment || !comment.trim()) {
+        return res.status(400).json({ message: 'Comment cannot be empty' });
+    }
 
+    // Push the new comment with the unique commentId
+    post.comments.push({
+        commentId: req.body.commentId,  // Use the provided commentId
+        username,
+        comment,
+        timestamp: new Date(),
+        replies: []
+    });
+}
         // Handle the "reply" action
         } else if (action === 'reply') {
             if (!reply || !reply.trim()) {
