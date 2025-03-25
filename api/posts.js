@@ -78,7 +78,7 @@ return {
     dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
     hearts: post.hearts,
     heartedBy: post.heartedBy ? JSON.parse(post.heartedBy || '[]') : [], // Corrected line
-        comments: post.comments ? JSON.parse(post.comments || '[]') : [],
+    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
     photo: photoUrl,
     profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
 };
