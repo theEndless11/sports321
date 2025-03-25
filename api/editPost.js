@@ -74,17 +74,21 @@ module.exports = async function handler(req, res) {
             }
             shouldUpdateDB = true;
         }
-        // ✅ Handle "heart" action
-        else if (action === 'heart') {
-            if (post.heartedBy.includes(username)) {
-                post.hearts -= 1;
-                post.heartedBy = post.heartedBy.filter(user => user !== username);
-            } else {
-                post.hearts += 1;
-                post.heartedBy.push(username);
-            }
-            shouldUpdateDB = true;
+  // ✅ Handle "heart" action
+else if (action === 'heart') {
+    const comment = post.comments.find(comment => comment.commentId === commentId);
+    if (comment) {
+        if (comment.heartedBy.includes(username)) {
+            comment.hearts -= 1;
+            comment.heartedBy = comment.heartedBy.filter(user => user !== username);
+        } else {
+            comment.hearts += 1;
+            comment.heartedBy.push(username);
         }
+        shouldUpdateDB = true;
+    }
+}
+
         // ✅ Handle "comment" action
         else if (action === 'comment') {
             if (!comment || !comment.trim()) {
