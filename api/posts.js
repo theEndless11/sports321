@@ -65,16 +65,7 @@ module.exports = async function handler(req, res) {
                         photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
                     }
                 }
-  const safeParse = (data) => {
-    try {
-        return typeof data === 'string' ? JSON.parse(data) : data;
-    } catch (error) {
-        console.error('Error parsing JSON:', error);
-        return [];
-    }
-};
-
-return {
+ return {
     _id: post._id,
     message: post.message,
     timestamp: post.timestamp,
@@ -82,14 +73,15 @@ return {
     sessionId: post.sessionId,
     likes: post.likes,
     dislikes: post.dislikes,
-    likedBy: safeParse(post.likedBy),
-    dislikedBy: safeParse(post.dislikedBy),
+    likedBy: JSON.parse(post.likedBy || '[]'),
+    dislikedBy: JSON.parse(post.dislikedBy || '[]'),
     hearts: post.hearts,
-    heartedBy: safeParse(post.heartedBy),
-    comments: safeParse(post.comments),
+    heartedBy: JSON.parse(post.heartedBy || '[]'),
+    comments: JSON.parse(post.comments || '[]'),
     photo: photoUrl,
     profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
 };
+
 
       });
 
