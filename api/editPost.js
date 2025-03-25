@@ -86,7 +86,7 @@ module.exports = async function handler(req, res) {
     const commentId = generateUUID(); // Generate a unique comment ID
     const timestamp = new Date(); // Timestamp for when the comment is created
 
-    // Add the comment object with its ID, timestamp, and username
+    // Add the comment object with its ID, timestamp, username, and text to the post's comments array
     post.comments.push({
         commentId,          // Unique comment ID
         username,           // Username of the person commenting
@@ -94,16 +94,16 @@ module.exports = async function handler(req, res) {
         timestamp          // Timestamp when the comment was made
     });
 
-    // Send back the commentId and the newly created comment
-    return res.status(200).json({
-        message: 'Comment added successfully',
-        newCommentId: commentId, // Send back the new commentId
-        comment: { commentId, username, comment, timestamp }
+    // Return updated post data, including the new commentId
+    return res.json({
+        ...post,
+        commentId,  // Returning the new commentId as part of the response (optional for frontend)
     });
 
 } else {
     return res.status(400).json({ message: 'Invalid action type' });
 }
+
 
         // Handle the "reply" action
         else if (action === 'reply') {
