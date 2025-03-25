@@ -74,7 +74,7 @@ module.exports = async function handler(req, res) {
             }
             shouldUpdateDB = true;
         }
-  // ✅ Handle "heart" action
+// ✅ Handle "heart" action
 else if (action === 'heart') {
     const comment = post.comments.find(comment => comment.commentId === commentId);
     if (comment) {
@@ -92,9 +92,13 @@ else if (action === 'heart') {
         // Save the updated post to the database here (not shown)
     }
 
-    // Respond with the updated post
+    // Add logging to check if the comment and hearts are updated
+    console.log("Updated Post: ", post);  // Log the entire post object after updating hearts
+
+    // Respond with the updated post, including comments and hearts
     res.json(post); // Return the entire post, including updated hearts
 }
+
 
         // ✅ Handle "comment" action
         else if (action === 'comment') {
