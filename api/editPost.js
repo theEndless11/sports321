@@ -25,7 +25,7 @@ module.exports = async function handler(req, res) {
     // Set CORS headers for all other requests
     setCorsHeaders(res);
 
-    const { postId, username, action, comment, reply, commentId } = req.body;
+   const { postId, username, action, comment, reply } = req.body;
 
     if (!postId || !action || !username) {
         return res.status(400).json({ message: 'Post ID, action, and username are required' });
@@ -49,75 +49,69 @@ module.exports = async function handler(req, res) {
 
         // Handle the "like" action
         if (action === 'like') {
-            // Handle liking logic (not changed)
-        }
+            // If the user has already disliked the post, remove dislike and decrement dislike count
+            if (post.dislikedBy.includes(username)) {
+                post.dislikes -= 1;
+                post.dislikedBy = post.dislikedBy.filter(user => user !== username);
+            }
+
+            // If the user has already liked the post, remove like and decrement like count
+            if (post.likedBy.includes(username)) {
+                post.likes -= 1; // Remove like and decrement like count
+                post.likedBy = post.likedBy.filter(user => user !== username);
+            } else {
+                post.likes += 1; // Add like and increment like count
+                post.likedBy.push(username);
+            }
 
         // Handle the "dislike" action
-        else if (action === 'dislike') {
-            // Handle dislike logic (not changed)
-        }
+        } else if (action === 'dislike') {
+            // If the user has already liked the post, remove like and decrement like count
+            if (post.likedBy.includes(username)) {
+                post.likes -= 1;
+                post.likedBy = post.likedBy.filter(user => user !== username);
+            }
+
+            // If the user has already disliked the post, remove dislike and decrement dislike count
+            if (post.dislikedBy.includes(username)) {
+                post.dislikes -= 1; // Remove dislike and decrement dislike count
+                post.dislikedBy = post.dislikedBy.filter(user => user !== username);
+            } else {
+                post.dislikes += 1; // Add dislike and increment dislike count
+                post.dislikedBy.push(username);
+            }
 
         // Handle the "heart" action
-        else if (action === 'heart') {
-            // Ensure we target the right comment using commentId
-            const targetComment = post.comments.find(c => c.commentId === commentId);
-
-            if (!targetComment) {
-                return res.status(400).json({ message: 'Comment not found' });
-            }
-
-            // If the user has already hearted this comment, remove their heart
-            if (targetComment.heartedBy.includes(username)) {
-                targetComment.hearts -= 1;
-                targetComment.heartedBy = targetComment.heartedBy.filter(user => user !== username);
+        } else if (action === 'heart') {
+            if (post.heartedBy.includes(username)) {
+                post.hearts -= 1; // Remove heart and decrement heart count
+                post.heartedBy = post.heartedBy.filter(user => user !== username);
             } else {
-                // If the user has not hearted the comment yet, add their heart
-                targetComment.hearts += 1;
-                targetComment.heartedBy.push(username);
+                post.hearts += 1; // Add heart and increment heart count
+                post.heartedBy.push(username);
             }
-        }
 
-// Handle the "comment" action
-} else if (action === 'comment') {
-    if (!comment || !comment.trim()) {
-        return res.status(400).json({ message: 'Comment cannot be empty' });
-    }
-
-    const commentId = generateUUID(); // Generate a unique comment ID
-    const timestamp = new Date(); // Timestamp for when the comment is created
-
-    // Add the comment object with its ID, timestamp, username, and text to the post's comments array
-    post.comments.push({
-        commentId,          // Unique comment ID
-        username,           // Username of the person commenting
-        comment,            // The text of the comment
-        timestamp          // Timestamp when the comment was made
-    });
-
-    // Return updated post data, including the new commentId
-    return res.json({
-        ...post,
-        commentId,  // Returning the new commentId as part of the response (optional for frontend)
-    });
-
-} else {
-    return res.status(400).json({ message: 'Invalid action type' });
-}
-
+        // Handle the "comment" action
+        } else if (action === 'comment') {
+            if (!comment || !comment.trim()) {
+                return res.status(400).json({ message: 'Comment cannot be empty' });
+            }
+            post.comments.push({ username, comment, timestamp: new Date(), replies: [] });
 
         // Handle the "reply" action
-        else if (action === 'reply') {
+        } else if (action === 'reply') {
             if (!reply || !reply.trim()) {
                 return res.status(400).json({ message: 'Reply cannot be empty' });
             }
 
             // Find the comment to which we are replying
-            const commentIndex = post.comments.findIndex(c => c.commentId === commentId);
+            const commentIndex = post.comments.findIndex(c => c.username === username && c.comment === comment);
             if (commentIndex !== -1) {
                 post.comments[commentIndex].replies.push({ username, reply, timestamp: new Date() });
             } else {
                 return res.status(400).json({ message: 'Comment not found to reply to' });
             }
+
         } else {
             return res.status(400).json({ message: 'Invalid action type' });
         }
@@ -130,8 +124,8 @@ module.exports = async function handler(req, res) {
                 post.dislikes,
                 JSON.stringify(post.likedBy),
                 JSON.stringify(post.dislikedBy),
-                post.hearts,
-                JSON.stringify(post.heartedBy),
+                post.hearts, // Store the heart count as an integer
+                JSON.stringify(post.heartedBy), // Store the heartedBy array as a JSON string
                 JSON.stringify(post.comments),
                 postId
             ]
@@ -145,5 +139,6 @@ module.exports = async function handler(req, res) {
         res.status(500).json({ message: 'Error updating post', error });
     }
 }
+
 
 
