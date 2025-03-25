@@ -130,24 +130,41 @@ else if (action === 'comment') {
     shouldUpdateDB = true;
 }
 
-        // ✅ Handle "reply" action
-        else if (action === 'reply') {
-            if (!reply || !reply.trim()) {
-                return res.status(400).json({ message: 'Reply cannot be empty' });
-            }
+// ✅ Handle "reply" action (Replying to a specific comment)
+else if (action === 'reply') {
+    if (!reply || !reply.trim()) {
+        return res.status(400).json({ message: 'Reply cannot be empty' });
+    }
 
-            const commentIndex = post.comments.findIndex(c => c.commentId === commentId);
-            if (commentIndex !== -1) {
-                post.comments[commentIndex].replies.push({
-                    username,
-                    reply,
-                    timestamp: new Date()
-                });
-                shouldUpdateDB = true;
-            } else {
-                return res.status(404).json({ message: 'Comment not found to reply to' });
-            }
-        } else {
+    // Find the target comment inside the post's `comments` array
+    const targetCommentIndex = post.comments.findIndex(c => String(c.commentId) === String(commentId));
+
+    if (targetCommentIndex !== -1) {
+        const targetComment = post.comments[targetCommentIndex];
+
+        // Ensure `replies` is always an array
+        targetComment.replies = Array.isArray(targetComment.replies) ? targetComment.replies : [];
+
+        // Generate a unique `replyId` for tracking replies
+        const newReply = {
+            replyId: uuidv4(), // Unique ID for each reply
+            username,
+            reply,
+            timestamp: new Date()
+        };
+
+        // ✅ Push new reply inside the correct comment
+        targetComment.replies.push(newReply);
+
+        // ✅ Update the post's comments array
+        post.comments[targetCommentIndex] = targetComment;
+
+        shouldUpdateDB = true;
+    } else {
+        return res.status(404).json({ message: 'Comment not found to reply to' });
+    }
+}
+ else {
             return res.status(400).json({ message: 'Invalid action type' });
         }
 
