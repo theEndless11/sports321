@@ -96,8 +96,6 @@ return {
     profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
 };
 
-
-
       });
 
             // Fetch total post count for pagination
