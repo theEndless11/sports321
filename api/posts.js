@@ -1,5 +1,3 @@
-hey not post but get reply 
-
 const { promisePool } = require('../utils/db'); // MySQL connection pool
 
 // Set CORS headers for all methods
