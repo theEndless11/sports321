@@ -130,7 +130,6 @@ else if (action === 'comment') {
     shouldUpdateDB = true;
 }
 
-// ✅ Handle "reply" action (Replying to a specific comment)
 else if (action === 'reply') {
     if (!reply || !reply.trim()) {
         return res.status(400).json({ message: 'Reply cannot be empty' });
@@ -159,11 +158,15 @@ else if (action === 'reply') {
         // ✅ Update the post's comments array
         post.comments[targetCommentIndex] = targetComment;
 
+        // ✅ Update the post in the database
+        await updatePostInDatabase(post._id, post); // Function to save the updated post to DB
+
         shouldUpdateDB = true;
     } else {
         return res.status(404).json({ message: 'Comment not found to reply to' });
     }
 }
+
  else {
             return res.status(400).json({ message: 'Invalid action type' });
         }
