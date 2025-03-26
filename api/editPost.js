@@ -130,6 +130,9 @@ else if (action === 'comment') {
     shouldUpdateDB = true;
 }
 
+the previous replies are still showing only on adding a new reply , check if thats caused by 
+
+// ✅ Handle "reply" action (Replying to a specific comment)
 else if (action === 'reply') {
     if (!reply || !reply.trim()) {
         return res.status(400).json({ message: 'Reply cannot be empty' });
@@ -157,9 +160,6 @@ else if (action === 'reply') {
 
         // ✅ Update the post's comments array
         post.comments[targetCommentIndex] = targetComment;
-
-        // ✅ Update the post in the database
-        await updatePostInDatabase(post._id, post); // Function to save the updated post to DB
 
         shouldUpdateDB = true;
     } else {
