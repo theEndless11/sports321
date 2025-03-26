@@ -56,41 +56,49 @@ module.exports = async function handler(req, res) {
         try {
             const [results] = await promisePool.execute(sqlQuery, queryParams);
 
-            const formattedPosts = results.map(post => {
-                let photoUrl = null;
-                if (post.photo) {
-                    if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
-                        photoUrl = post.photo;
-                    } else {
-                        photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
-                    }
-                }
+const formattedPosts = results.map(post => {
+    let photoUrl = null;
+    if (post.photo) {
+        if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
+            photoUrl = post.photo;
+        } else {
+            photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
+        }
+    }
 
-                // Make sure each comment has a replies array
-                const comments = JSON.parse(post.comments || '[]').map(comment => {
-                    return {
-                        ...comment,
-                        replies: comment.replies ? JSON.parse(comment.replies || '[]') : []  // Ensure replies are parsed
-                    };
-                });
+    // Ensure that post.comments is properly parsed
+    let comments = [];
+    try {
+        comments = typeof post.comments === 'string' ? JSON.parse(post.comments) : post.comments || [];
+    } catch (error) {
+        console.error('Error parsing comments:', error);
+    }
 
-                return {
-                    _id: post._id,
-                    message: post.message,
-                    timestamp: post.timestamp,
-                    username: post.username,
-                    sessionId: post.sessionId,
-                    likes: post.likes,
-                    dislikes: post.dislikes,
-                    likedBy: JSON.parse(post.likedBy || '[]'),
-                    dislikedBy: JSON.parse(post.dislikedBy || '[]'),
-                    hearts: post.hearts,
-                    heartedBy: JSON.parse(post.heartedBy || '[]'),
-                    comments: comments,  // Attach comments with replies
-                    photo: photoUrl,
-                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
-                };
-            });
+    // Make sure each comment has a replies array
+    comments = comments.map(comment => {
+        return {
+            ...comment,
+            replies: comment.replies ? (typeof comment.replies === 'string' ? JSON.parse(comment.replies) : comment.replies) : []  // Ensure replies are parsed
+        };
+    });
+
+    return {
+        _id: post._id,
+        message: post.message,
+        timestamp: post.timestamp,
+        username: post.username,
+        sessionId: post.sessionId,
+        likes: post.likes,
+        dislikes: post.dislikes,
+        likedBy: JSON.parse(post.likedBy || '[]'),
+        dislikedBy: JSON.parse(post.dislikedBy || '[]'),
+        hearts: post.hearts,
+        heartedBy: JSON.parse(post.heartedBy || '[]'),
+        comments: comments,  // Attach comments with replies
+        photo: photoUrl,
+        profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
+    };
+});
 
             // Fetch total post count for pagination
             const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
