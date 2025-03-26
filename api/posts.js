@@ -7,7 +7,7 @@ const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');  // Allowed headers
 };
 
-// Serverless API handler for posts, profile pictures, and user descriptions
+// Serverless API handler for posts, profile pictures, user descriptions, and replies
 module.exports = async function handler(req, res) {
     setCorsHeaders(res);
 
@@ -16,10 +16,40 @@ module.exports = async function handler(req, res) {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
 
-    // Handle GET requests to fetch posts and user descriptions
+    // Handle GET requests to fetch posts, user descriptions, and replies
     if (req.method === 'GET') {
-        const { username_like, start_timestamp, end_timestamp, username, page, limit, sort } = req.query;
+        const { username_like, start_timestamp, end_timestamp, username, page, limit, sort, commentId } = req.query;
 
+        // If we are looking for replies to a specific comment
+        if (commentId) {
+            try {
+                // Fetch all posts
+                const [results] = await promisePool.execute('SELECT * FROM posts');
+
+                // Find the comment with the given commentId and get its replies
+                let replyResponse = [];
+
+                for (let post of results) {
+                    const comments = JSON.parse(post.comments || '[]');
+                    for (let comment of comments) {
+                        if (comment.commentId === commentId) {
+                            replyResponse = comment.replies || [];
+                            break;
+                        }
+                    }
+                    if (replyResponse.length) break;  // Exit early if the comment is found
+                }
+
+                // Return the replies found for the given commentId
+                return res.status(200).json({ replies: replyResponse });
+
+            } catch (error) {
+                console.error("❌ Error fetching replies:", error);
+                return res.status(500).json({ message: 'Error fetching replies', error });
+            }
+        }
+
+        // Default behavior if no commentId is provided, retrieve posts with comments and replies
         let sqlQuery = 'SELECT * FROM posts';
         let queryParams = [];
 
@@ -65,36 +95,36 @@ module.exports = async function handler(req, res) {
                         photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
                     }
                 }
-return {
-    _id: post._id,
-    message: post.message,
-    timestamp: post.timestamp,
-    username: post.username,
-    sessionId: post.sessionId,
-    likes: post.likes,
-    dislikes: post.dislikes,
-    likedBy: JSON.parse(post.likedBy || '[]'),
-    dislikedBy: JSON.parse(post.dislikedBy || '[]'),
-    hearts: post.hearts,
-    heartedBy: JSON.parse(post.heartedBy || '[]'),
-    comments: JSON.parse(post.comments || '[]').map(comment => ({
-        commentId: comment.commentId,
-        username: comment.username,
-        comment: comment.comment,
-        timestamp: comment.timestamp,
-        hearts: comment.hearts || 0,
-        heartedBy: Array.isArray(comment.heartedBy) ? comment.heartedBy : [],
-        replies: Array.isArray(comment.replies) ? comment.replies.map(reply => ({
-            replyId: reply.replyId,
-            username: reply.username,
-            reply: reply.reply,
-            timestamp: reply.timestamp
-        })) : [] // Make sure replies are properly parsed
-    })),
-    photo: photoUrl,
-    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
-};
-      });
+                return {
+                    _id: post._id,
+                    message: post.message,
+                    timestamp: post.timestamp,
+                    username: post.username,
+                    sessionId: post.sessionId,
+                    likes: post.likes,
+                    dislikes: post.dislikes,
+                    likedBy: JSON.parse(post.likedBy || '[]'),
+                    dislikedBy: JSON.parse(post.dislikedBy || '[]'),
+                    hearts: post.hearts,
+                    heartedBy: JSON.parse(post.heartedBy || '[]'),
+                    comments: JSON.parse(post.comments || '[]').map(comment => ({
+                        commentId: comment.commentId,
+                        username: comment.username,
+                        comment: comment.comment,
+                        timestamp: comment.timestamp,
+                        hearts: comment.hearts || 0,
+                        heartedBy: Array.isArray(comment.heartedBy) ? comment.heartedBy : [],
+                        replies: Array.isArray(comment.replies) ? comment.replies.map(reply => ({
+                            replyId: reply.replyId,
+                            username: reply.username,
+                            reply: reply.reply,
+                            timestamp: reply.timestamp
+                        })) : [] // Make sure replies are properly parsed
+                    })),
+                    photo: photoUrl,
+                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
+                };
+            });
 
             // Fetch total post count for pagination
             const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
