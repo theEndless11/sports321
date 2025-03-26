@@ -150,7 +150,9 @@ else if (action === 'reply') {
             replyId: uuidv4(), // Unique ID for each reply
             username,
             reply,
-            timestamp: new Date()
+            timestamp: new Date(),
+            hearts: 0,         // Track the number of hearts for this reply
+            heartedBy: []      // Track users who hearted this reply
         };
 
         // ✅ Push new reply inside the correct comment
