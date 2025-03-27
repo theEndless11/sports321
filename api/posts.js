@@ -77,21 +77,7 @@ module.exports = async function handler(req, res) {
     dislikedBy: JSON.parse(post.dislikedBy || '[]'),
     hearts: post.hearts,
     heartedBy: JSON.parse(post.heartedBy || '[]'),
-     comments: JSON.parse(post.comments || '[]').map(comment => ({
-        commentId: comment.commentId,
-        username: comment.username,
-        comment: comment.comment,
-        timestamp: comment.timestamp,
-        hearts: comment.hearts || 0,
-        heartedBy: Array.isArray(comment.heartedBy) ? comment.heartedBy : [],
-        // ✅ Now each comment contains multiple replies
-        replies: Array.isArray(comment.replies) ? comment.replies.map(reply => ({
-            replyId: reply.replyId,
-            username: reply.username,
-            reply: reply.reply,
-            timestamp: reply.timestamp
-        })) : []
-    })),
+    comments: JSON.parse(post.comments || '[]'),
     photo: photoUrl,
     profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
 };
