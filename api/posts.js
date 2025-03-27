@@ -77,7 +77,10 @@ module.exports = async function handler(req, res) {
     dislikedBy: JSON.parse(post.dislikedBy || '[]'),
     hearts: post.hearts,
     heartedBy: JSON.parse(post.heartedBy || '[]'),
-    comments: JSON.parse(post.comments || '[]'),
+     comments: post.comments.map(comment => ({
+      ...comment,
+      replies: comment.replies || [] // Ensure replies are always an array
+    })),
     photo: photoUrl,
     profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
 };
