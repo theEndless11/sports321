@@ -54,42 +54,26 @@ const handler = async (req, res) => {
 
             let photoUrl = photo || null;
 
-// Insert the new post into MySQL
-const [result] = await promisePool.execute(
-    `INSERT INTO posts 
-    (message, timestamp, username, sessionId, likes, dislikes, likedBy, comments, photo, profile_picture, hearts, dislikedBy, heartedBy) 
-    VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-        message || '',  // Ensure message is never undefined or null
-        username,
-        sessionId,
-        JSON.stringify([]), // Ensure comments are initialized as empty array
-        JSON.stringify([]), // Empty array for likedBy
-        JSON.stringify([]),  // Empty array for dislikedBy
-        photoUrl || '', // Ensure photoUrl is handled (if null or undefined, use empty string)
-        profilePicture || '', // Ensure profilePicture is handled (if null or undefined, use empty string)
-        0,  // Hearts initialized to 0
-        JSON.stringify([]), // Empty array for dislikedBy
-        JSON.stringify([])  // Empty array for heartedBy
-    ]
-);
+    // Insert the new post into MySQL
+            const [result] = await promisePool.execute(
+                INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, profile_picture)
+                 VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?),
+                [message || '', username, sessionId, '[]', '[]', '[]', photoUrl, profilePicture]
+            );
 
-// Create the newPost object with all required values
-const newPost = {
-    _id: result.insertId,
-    message: message || '',  // Ensure message is never undefined or null
-    timestamp: new Date(),  // Timestamp is set to current time
-    username,
-    likes: 0,
-    dislikes: 0,
-    likedBy: [],  // Initialize as empty array
-    comments: [],  // Initialize as empty array
-    photo: photoUrl || '',  // Ensure the photo URL is set
-    profilePicture: profilePicture || '', // Ensure the profile picture URL is set
-    hearts: 0,
-    dislikedBy: [],  // Initialize as empty array
-    heartedBy: [] // Initialize as empty array
-};
+            const newPost = {
+                _id: result.insertId,
+                message: message || '',
+                timestamp: new Date(),
+                username,
+                likes: 0,
+                dislikes: 0,
+                likedBy: [],
+                dislikedBy: [],
+                comments: [],
+                photo: photoUrl,
+                profilePicture
+            };
 
             // Publish the new post to Ably
             try {
