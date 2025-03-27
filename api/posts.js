@@ -72,7 +72,7 @@ module.exports = async function handler(req, res) {
                     likedBy: JSON.parse(post.likedBy || '[]'), 
                     dislikedBy: JSON.parse(post.dislikedBy || '[]'), 
                     hearts: post.hearts,
-                    heartedBy: JSON.parse(post.heartedBy || '[]'),
+                      heartedBy: post.heartedBy ? JSON.parse(post.heartedBy || '[]') : [],
                        comments: post.comments ? JSON.parse(post.comments || '[]') : [],
                     photo: photoUrl,
                     profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
