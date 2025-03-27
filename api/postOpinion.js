@@ -70,6 +70,8 @@ const handler = async (req, res) => {
                 dislikes: 0,
                 likedBy: [],
                 dislikedBy: [],
+                 hearts: 0,
+                heartedBy:[],
                 comments: [],
                 photo: photoUrl,
                 profilePicture
