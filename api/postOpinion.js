@@ -26,8 +26,8 @@ const handler = async (req, res) => {
     }
 
     setCorsHeaders(req, res);
-
-    // POST: Create new post
+    
+  // POST: Create new post
     if (req.method === 'POST') {
         const { message, username, sessionId, photo } = req.body;
 
@@ -40,11 +40,11 @@ const handler = async (req, res) => {
         }
 
         try {
-            let profilePicture = 'https://latestnewsandaffairs.site/public/pfp2.jpg'; // Default profile picture
+            let profilePicture = 'https://latestnewsandaffairs.site/public/pfp2.jpg'; // Default picture
 
-            // ✅ Fetch profile picture from `users` instead of `posts`
+            // Fetch profile picture from the database
             const [userResult] = await promisePool.execute(
-                'SELECT profile_picture FROM users WHERE username = ? LIMIT 1',
+                'SELECT profile_picture FROM posts WHERE username = ? LIMIT 1',
                 [username]
             );
 
@@ -53,7 +53,7 @@ const handler = async (req, res) => {
             }
 
             let photoUrl = photo || null;
-
+            
             // ✅ Fixed SQL syntax inside execute()
             const [result] = await promisePool.execute(
                 `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, profile_picture)
@@ -75,17 +75,17 @@ const handler = async (req, res) => {
                 profilePicture
             };
 
-            // ✅ Publish the new post to Ably
+            // Publish the new post to Ably
             try {
                 await publishToAbly('newOpinion', newPost);
             } catch (error) {
                 console.error('Error publishing to Ably:', error);
             }
 
-            return res.status(201).json(newPost);
+            return res.status(201).json(newPost);  // Ensure response is sent here and stop further execution
         } catch (error) {
             console.error('Error saving post:', error);
-            return res.status(500).json({ message: 'Error saving post', error });
+            return res.status(500).json({ message: 'Error saving post', error });  // Ensure response is sent here
         }
     }
 
