@@ -54,20 +54,23 @@ const handler = async (req, res) => {
 
             let photoUrl = photo || null;
 
-        // Insert the new post into MySQL
+ // Insert the new post into MySQL
 const [result] = await promisePool.execute(
     `INSERT INTO posts 
-    (message, timestamp, username, sessionId, likes, dislikes, likedBy, comments, photo, profile_picture, hearts,dislikedBy, heartedBy ) 
-    VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+    (message, timestamp, username, sessionId, likes, dislikes, likedBy, comments, photo, profile_picture, hearts, dislikedBy, heartedBy) 
+    VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
     [
-        message || '', // Ensure message is never undefined or null
+        message || '',  // Ensure message is never undefined or null
         username,
         sessionId,
         JSON.stringify([]), // Initialize as empty arrays for likes/dislikes/heartedBy/likedBy
         JSON.stringify([]),
-        JSON.stringify([]),
+        JSON.stringify([]),  // Empty array for comments
         photoUrl || '', // Ensure photoUrl is handled (if null or undefined, use empty string)
-        profilePicture || '' // Ensure profilePicture is handled (if null or undefined, use empty string)
+        profilePicture || '', // Ensure profilePicture is handled (if null or undefined, use empty string)
+        0,  // Hearts initialized to 0
+        JSON.stringify([]), // Empty array for dislikedBy
+        JSON.stringify([])  // Empty array for heartedBy
     ]
 );
 
@@ -80,11 +83,11 @@ const newPost = {
     likes: 0,
     dislikes: 0,
     likedBy: [],  // Initialize as empty array
-      comments: [],  // Initialize as empty array
+    comments: [],  // Initialize as empty array
     photo: photoUrl || '',  // Ensure the photo URL is set
     profilePicture: profilePicture || '', // Ensure the profile picture URL is set
     hearts: 0,
-        dislikedBy: [],  // Initialize as empty array
+    dislikedBy: [],  // Initialize as empty array
     heartedBy: [] // Initialize as empty array
 };
 
