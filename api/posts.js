@@ -16,40 +16,35 @@ module.exports = async function handler(req, res) {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
 
-  // Handle GET requests to fetch posts and user descriptions
+
     if (req.method === 'GET') {
         const { username_like, start_timestamp, end_timestamp, username, page, limit, sort } = req.query;
 
         let sqlQuery = 'SELECT * FROM posts';
         let queryParams = [];
 
-        // Pagination logic
-        const pageNumber = parseInt(page, 10) || 1;  // Default to page 1
-        const pageSize = parseInt(limit, 10) || 5;   // Default to 5 posts per page
+        const pageNumber = parseInt(page, 10) || 1;
+        const pageSize = parseInt(limit, 10) || 5;
         const offset = (pageNumber - 1) * pageSize;
 
-        // Apply username filter
         if (username_like) {
             sqlQuery += ' WHERE username LIKE ?';
             queryParams.push(`%${username_like}%`);
         }
 
-        // Apply timestamp filter
         if (start_timestamp && end_timestamp) {
             sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
             sqlQuery += ' timestamp BETWEEN ? AND ?';
             queryParams.push(start_timestamp, end_timestamp);
         }
 
-        // Sorting logic
         const sortOptions = {
             'most-liked': 'likes DESC',
-            'most-comments': 'CHAR_LENGTH(comments) DESC', // Sort based on comment length
+            'most-comments': 'CHAR_LENGTH(comments) DESC',
             'newest': 'timestamp DESC'
         };
         sqlQuery += ` ORDER BY ${sortOptions[sort] || 'timestamp DESC'}`;
 
-        // Pagination
         sqlQuery += ' LIMIT ? OFFSET ?';
         queryParams.push(pageSize, offset);
 
@@ -65,25 +60,25 @@ module.exports = async function handler(req, res) {
                         photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
                     }
                 }
- return {
-    _id: post._id,
-    message: post.message,
-    timestamp: post.timestamp,
-    username: post.username,
-    sessionId: post.sessionId,
-    likes: post.likes,
-    dislikes: post.dislikes,
-    likedBy: JSON.parse(post.likedBy || '[]'),
-    dislikedBy: JSON.parse(post.dislikedBy || '[]'),
-    hearts: post.hearts,
-    heartedBy: JSON.parse(post.heartedBy || '[]'),
-    comments: JSON.parse(post.comments || '[]'),
-    photo: photoUrl,
-    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
-};
-      });
 
-            // Fetch total post count for pagination
+                return {
+                    _id: post._id,
+                    message: post.message,
+                    timestamp: post.timestamp,
+                    username: post.username,
+                    sessionId: post.sessionId,
+                    likes: post.likes,
+                    dislikes: post.dislikes,
+                    likedBy: JSON.parse(post.likedBy || '[]'), 
+                    dislikedBy: JSON.parse(post.dislikedBy || '[]'), 
+                    hearts: post.hearts,
+                    heartedBy: JSON.parse(post.heartedBy || '[]'),
+                       comments: post.comments ? JSON.parse(post.comments || '[]') : [],
+                    photo: photoUrl,
+                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
+                };
+            });
+
             const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
             const [totalPostsResult] = await promisePool.execute(totalPostsQuery);
             const totalPosts = totalPostsResult[0].count;
@@ -91,7 +86,6 @@ module.exports = async function handler(req, res) {
 
             let response = { posts: formattedPosts, hasMorePosts };
 
-            // Fetch user details from users table if username is provided
             if (username) {
                 const userQuery = 'SELECT location, status, profession, hobby FROM users WHERE username = ?';
                 const [userResult] = await promisePool.execute(userQuery, [username]);
@@ -109,7 +103,6 @@ module.exports = async function handler(req, res) {
                     response.hobby = 'Hobby not available';
                 }
 
-                // Fetch description from posts table
                 const descriptionQuery = 'SELECT description FROM posts WHERE username = ?';
                 const [descriptionResult] = await promisePool.execute(descriptionQuery, [username]);
                 response.description = descriptionResult.length > 0 ? descriptionResult[0].description : 'No description available';
@@ -122,7 +115,6 @@ module.exports = async function handler(req, res) {
             return res.status(500).json({ message: 'Error retrieving posts', error });
         }
     }
-
 // Handle POST requests for updating location, status, profession, hobby, description, and profile picture
 if (req.method === 'POST') {
     const { username, location, status, profession, hobby, description, profilePicture } = req.body;
