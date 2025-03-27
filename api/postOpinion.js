@@ -57,7 +57,7 @@ const handler = async (req, res) => {
         // Insert the new post into MySQL
 const [result] = await promisePool.execute(
     `INSERT INTO posts 
-    (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, hearts, heartedBy, comments, photo, profile_picture) 
+    (message, timestamp, username, sessionId, likes, dislikes, likedBy, comments, photo, profile_picture, hearts,dislikedBy, heartedBy ) 
     VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
     [
         message || '', // Ensure message is never undefined or null
@@ -80,12 +80,12 @@ const newPost = {
     likes: 0,
     dislikes: 0,
     likedBy: [],  // Initialize as empty array
-    dislikedBy: [],  // Initialize as empty array
-    hearts: 0,
-    heartedBy: [],  // Initialize as empty array
-    comments: [],  // Initialize as empty array
+      comments: [],  // Initialize as empty array
     photo: photoUrl || '',  // Ensure the photo URL is set
-    profilePicture: profilePicture || ''  // Ensure the profile picture URL is set
+    profilePicture: profilePicture || '', // Ensure the profile picture URL is set
+    hearts: 0,
+        dislikedBy: [],  // Initialize as empty array
+    heartedBy: [] // Initialize as empty array
 };
 
             // Publish the new post to Ably
