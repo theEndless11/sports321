@@ -60,24 +60,22 @@ module.exports = async function handler(req, res) {
                         photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
                     }
                 }
-
-                return {
-                    _id: post._id,
-                    message: post.message,
-                    timestamp: post.timestamp,
-                    username: post.username,
-                    sessionId: post.sessionId,
-                    likes: post.likes,
-                    dislikes: post.dislikes,
-                    likedBy: JSON.parse(post.likedBy || '[]'), 
-                    dislikedBy: JSON.parse(post.dislikedBy || '[]'), 
-                    hearts: post.hearts,
-                      heartedBy: post.heartedBy ? JSON.parse(post.heartedBy || '[]') : [],
-                       comments: post.comments ? JSON.parse(post.comments || '[]') : [],
-                    photo: photoUrl,
-                    profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'
-                };
-            });
+                      return {
+                _id: post._id,
+                message: post.message,
+                timestamp: post.timestamp,
+                username: post.username,
+                sessionId: post.sessionId,
+                likes: post.likes,
+                dislikes: post.dislikes,
+                likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
+                dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
+                hearts: post.hearts,
+                comments: post.comments ? JSON.parse(post.comments || '[]') : [],
+                photo: photoUrl,
+                profilePicture: post.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Default profile picture
+            };
+              });
 
             const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
             const [totalPostsResult] = await promisePool.execute(totalPostsQuery);
