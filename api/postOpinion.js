@@ -54,7 +54,7 @@ const handler = async (req, res) => {
 
             let photoUrl = photo || null;
 
- // Insert the new post into MySQL
+// Insert the new post into MySQL
 const [result] = await promisePool.execute(
     `INSERT INTO posts 
     (message, timestamp, username, sessionId, likes, dislikes, likedBy, comments, photo, profile_picture, hearts, dislikedBy, heartedBy) 
@@ -63,9 +63,9 @@ const [result] = await promisePool.execute(
         message || '',  // Ensure message is never undefined or null
         username,
         sessionId,
-        JSON.stringify([]), // Initialize as empty arrays for likes/dislikes/heartedBy/likedBy
-        JSON.stringify([]),
-        JSON.stringify([]),  // Empty array for comments
+        JSON.stringify([]), // Ensure comments are initialized as empty array
+        JSON.stringify([]), // Empty array for likedBy
+        JSON.stringify([]),  // Empty array for dislikedBy
         photoUrl || '', // Ensure photoUrl is handled (if null or undefined, use empty string)
         profilePicture || '', // Ensure profilePicture is handled (if null or undefined, use empty string)
         0,  // Hearts initialized to 0
