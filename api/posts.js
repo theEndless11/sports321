@@ -88,37 +88,41 @@ module.exports = async function handler(req, res) {
 
             let response = { posts: formattedPosts, hasMorePosts };
 
-            // Handle GET requests for retrieving user profile information
-            if (username) {
-                const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
-                const [userResult] = await promisePool.execute(userQuery, [username]);
+// Handle GET requests for retrieving user profile information
+if (username) {
+    const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
+    
+    try {
+        const [userResult] = await promisePool.execute(userQuery, [username]);
 
-                if (userResult.length > 0) {
-                    const userData = userResult[0];
-                    response.location = userData.location || 'Location not available';
-                    response.status = userData.status || 'Status not available';
-                    response.profession = userData.profession || 'Profession not available';
-                    response.hobby = userData.hobby || 'Hobby not available';
-                    response.description = userData.description || 'No description available';
-                    response.profile_picture = userData.profile_picture || 'No profile picture available';
-                } else {
-                    response.location = 'Location not available';
-                    response.status = 'Status not available';
-                    response.profession = 'Profession not available';
-                    response.hobby = 'Hobby not available';
-                    response.description = 'No description available';
-                    response.profile_picture = 'No profile picture available';
-                }
+        const response = {};
 
-                return res.status(200).json(response); // End GET request for user profile
-            }
-
-            return res.status(200).json(response); // End GET request for posts
-        } catch (error) {
-            console.error("❌ Error retrieving posts:", error);
-            return res.status(500).json({ message: 'Error retrieving posts', error });
+        if (userResult.length > 0) {
+            const userData = userResult[0];
+            response.username = userData.username;
+            response.location = userData.location || 'Location not available';
+            response.status = userData.status || 'Status not available';
+            response.profession = userData.profession || 'Profession not available';
+            response.hobby = userData.hobby || 'Hobby not available';
+            response.description = userData.description || 'No description available';
+            response.profile_picture = userData.profile_picture || 'No profile picture available'; // Ensure profile_picture is returned
+        } else {
+            response.username = username;
+            response.location = 'Location not available';
+            response.status = 'Status not available';
+            response.profession = 'Profession not available';
+            response.hobby = 'Hobby not available';
+            response.description = 'No description available';
+            response.profile_picture = 'No profile picture available'; // Default if not found
         }
+
+        return res.status(200).json(response); // Return the user profile data
+    } catch (error) {
+        console.error("❌ Error retrieving user profile:", error);
+        return res.status(500).json({ message: 'Error retrieving user profile', error });
     }
+}
+
 
     // Handle POST requests for updating location, status, profession, hobby, description, and profile picture
     if (req.method === 'POST') {
