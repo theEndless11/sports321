@@ -27,67 +27,69 @@ const handler = async (req, res) => {
 
     setCorsHeaders(req, res);
     
-  // POST: Create new post
-    if (req.method === 'POST') {
-        const { message, username, sessionId, photo } = req.body;
+// POST: Create new post
+if (req.method === 'POST') {
+    const { message, username, sessionId, photo } = req.body;
 
-        if (!username || !sessionId) {
-            return res.status(400).json({ message: 'Username and sessionId are required' });
-        }
-
-        if (!message && !photo) {
-            return res.status(400).json({ message: 'Post content cannot be empty' });
-        }
-
-        try {
-            let profilePicture = 'https://latestnewsandaffairs.site/public/pfp2.jpg'; // Default picture
-
-            // Fetch profile picture from the database
-            const [userResult] = await promisePool.execute(
-                'SELECT profile_picture FROM posts WHERE username = ? LIMIT 1',
-                [username]
-            );
-
-            if (userResult.length > 0 && userResult[0].profile_picture) {
-                profilePicture = userResult[0].profile_picture;
-            }
-
-            let photoUrl = photo || null;
-            
-            // ✅ Fixed SQL syntax inside execute()
-            const [result] = await promisePool.execute(
-                `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, profile_picture)
-                 VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?)`,
-                [message || '', username, sessionId, '[]', '[]', '[]', photoUrl, profilePicture]
-            );
-
-            const newPost = {
-                _id: result.insertId,
-                message: message || '',
-                timestamp: new Date(),
-                username,
-                likes: 0,
-                dislikes: 0,
-                likedBy: [],
-                dislikedBy: [],
-                comments: [],
-                photo: photoUrl,
-                profilePicture
-            };
-
-            // Publish the new post to Ably
-            try {
-                await publishToAbly('newOpinion', newPost);
-            } catch (error) {
-                console.error('Error publishing to Ably:', error);
-            }
-
-            return res.status(201).json(newPost);  // Ensure response is sent here and stop further execution
-        } catch (error) {
-            console.error('Error saving post:', error);
-            return res.status(500).json({ message: 'Error saving post', error });  // Ensure response is sent here
-        }
+    if (!username || !sessionId) {
+        return res.status(400).json({ message: 'Username and sessionId are required' });
     }
+
+    if (!message && !photo) {
+        return res.status(400).json({ message: 'Post content cannot be empty' });
+    }
+
+    try {
+        let profilePicture = 'https://latestnewsandaffairs.site/public/pfp1.jpg'; // Default picture
+
+        // Fetch profile picture from the users table based on username
+        const [userResult] = await promisePool.execute(
+            'SELECT profile_picture FROM users WHERE username = ? LIMIT 1',
+            [username]
+        );
+
+        // If a profile picture is found for the user, use it
+        if (userResult.length > 0 && userResult[0].profile_picture) {
+            profilePicture = userResult[0].profile_picture;
+        }
+
+        let photoUrl = photo || null;
+
+        // Insert new post into the posts table (no need to insert profile_picture anymore)
+        const [result] = await promisePool.execute(
+            `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo)
+             VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?)`,
+            [message || '', username, sessionId, '[]', '[]', '[]', photoUrl]
+        );
+
+        const newPost = {
+            _id: result.insertId,
+            message: message || '',
+            timestamp: new Date(),
+            username,
+            likes: 0,
+            dislikes: 0,
+            likedBy: [],
+            dislikedBy: [],
+            comments: [],
+            photo: photoUrl,
+            profilePicture // Include profile picture in the post response
+        };
+
+        // Publish the new post to Ably
+        try {
+            await publishToAbly('newOpinion', newPost);
+        } catch (error) {
+            console.error('Error publishing to Ably:', error);
+        }
+
+        return res.status(201).json(newPost);  // Ensure response is sent here and stop further execution
+    } catch (error) {
+        console.error('Error saving post:', error);
+        return res.status(500).json({ message: 'Error saving post', error });  // Ensure response is sent here
+    }
+}
+
 
     // PUT/PATCH: Handle likes/dislikes
     if (req.method === 'PUT' || req.method === 'PATCH') {
