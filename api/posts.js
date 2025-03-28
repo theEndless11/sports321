@@ -16,16 +16,12 @@ module.exports = async function handler(req, res) {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
 
- // Handle GET requests for retrieving posts or user profile information
+// Handle GET requests for retrieving posts or user profile information
 if (req.method === 'GET') {
-    const { username_like, start_timestamp, end_timestamp, username, page, limit, sort } = req.query;
-
+    const { username_like, start_timestamp, end_timestamp, username, page = 1, limit = 5, sort } = req.query;
     let sqlQuery = 'SELECT * FROM posts';
     let queryParams = [];
-
-    const pageNumber = parseInt(page, 10) || 1;
-    const pageSize = parseInt(limit, 10) || 5;
-    const offset = (pageNumber - 1) * pageSize;
+    const offset = (parseInt(page, 10) - 1) * parseInt(limit, 10);
 
     // Apply filters to query
     if (username_like) {
@@ -34,143 +30,79 @@ if (req.method === 'GET') {
     }
 
     if (start_timestamp && end_timestamp) {
-        sqlQuery += queryParams.length > 0 ? ' AND' : ' WHERE';
+        sqlQuery += queryParams.length ? ' AND' : ' WHERE';
         sqlQuery += ' timestamp BETWEEN ? AND ?';
         queryParams.push(start_timestamp, end_timestamp);
     }
 
-    // Sorting options
     const sortOptions = {
         'most-liked': 'likes DESC',
         'most-comments': 'CHAR_LENGTH(comments) DESC',
         'newest': 'timestamp DESC'
     };
-    sqlQuery += ` ORDER BY ${sortOptions[sort] || 'timestamp DESC'}`;
-
-    sqlQuery += ' LIMIT ? OFFSET ?';
-    queryParams.push(pageSize, offset);
+    sqlQuery += ` ORDER BY ${sortOptions[sort] || 'timestamp DESC'} LIMIT ? OFFSET ?`;
+    queryParams.push(parseInt(limit, 10), offset);
 
     try {
         const [results] = await promisePool.execute(sqlQuery, queryParams);
+        const usernames = [...new Set(results.map(post => post.username))];
 
-        // Fetch user profile picture for each post's username
-        const usernames = results.map(post => post.username);
+        let postsResponse = { posts: [], hasMorePosts: false };
 
-        if (usernames.length > 0) {
-            // Dynamically create placeholders for IN clause
-            const placeholders = usernames.map(() => '?').join(',');
-            const usersQuery = `SELECT username, profile_picture FROM users WHERE username IN (${placeholders})`;
+        if (usernames.length) {
+            const usersQuery = `SELECT username, profile_picture FROM users WHERE username IN (${usernames.map(() => '?').join(',')})`;
             const [usersResult] = await promisePool.execute(usersQuery, usernames);
 
-            const usersProfilePictures = usersResult.reduce((acc, user) => {
-                acc[user.username] = user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp3.jpg'; // Default if not available
+            const usersMap = usersResult.reduce((acc, user) => {
+                acc[user.username] = user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg';
                 return acc;
             }, {});
 
-            const formattedPosts = results.map(post => {
-                let photoUrl = null;
-                if (post.photo) {
-                    if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
-                        photoUrl = post.photo;
-                    } else {
-                        photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
-                    }
-                }
+            postsResponse.posts = results.map(post => ({
+                _id: post._id,
+                message: post.message,
+                timestamp: post.timestamp,
+                username: post.username,
+                sessionId: post.sessionId,
+                likes: post.likes,
+                dislikes: post.dislikes,
+                likedBy: post.likedBy ? JSON.parse(post.likedBy) : [],
+                dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
+                hearts: post.hearts,
+                comments: post.comments ? JSON.parse(post.comments) : [],
+                photo: post.photo?.startsWith('http') || post.photo?.startsWith('data:image/') 
+                    ? post.photo 
+                    : `data:image/jpeg;base64,${post.photo.toString('base64')}`,
+                profilePicture: usersMap[post.username] || 'https://latestnewsandaffairs.site/public/pfp.jpg'
+            }));
 
-                return {
-                    _id: post._id,
-                    message: post.message,
-                    timestamp: post.timestamp,
-                    username: post.username,
-                    sessionId: post.sessionId,
-                    likes: post.likes,
-                    dislikes: post.dislikes,
-                    likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
-                    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
-                    hearts: post.hearts,
-                    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
-                    photo: photoUrl,
-                    profilePicture: usersProfilePictures[post.username] || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Use profile picture from users table
-                };
-            });
-
-            // Fetch total posts for pagination
             const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
-            const [totalPostsResult] = await promisePool.execute(totalPostsQuery);
-            const totalPosts = totalPostsResult[0].count;
-            const hasMorePosts = (pageNumber * pageSize) < totalPosts;
-
-            let postsResponse = { posts: formattedPosts, hasMorePosts };
-
-            // Handle GET requests for retrieving user profile information
-            if (username) {
-                const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture, username FROM users WHERE username = ?';
-                
-                try {
-                    const [userResult] = await promisePool.execute(userQuery, [username]);
-
-                    let userProfileResponse = {};
-
-                    if (userResult.length > 0) {
-                        const userData = userResult[0];
-                        userProfileResponse.username = userData.username;
-                        userProfileResponse.location = userData.location || 'Location not available';
-                        userProfileResponse.status = userData.status || 'Status not available';
-                        userProfileResponse.profession = userData.profession || 'Profession not available';
-                        userProfileResponse.hobby = userData.hobby || 'Hobby not available';
-                        userProfileResponse.description = userData.description || 'No description available';
-                        userProfileResponse.profile_picture = userData.profile_picture || 'No profile picture available';
-                    } else {
-                        userProfileResponse.username = username;
-                        userProfileResponse.location = 'Location not available';
-                        userProfileResponse.status = 'Status not available';
-                        userProfileResponse.profession = 'Profession not available';
-                        userProfileResponse.hobby = 'Hobby not available';
-                        userProfileResponse.description = 'No description available';
-                        userProfileResponse.profile_picture = 'No profile picture available';
-                    }
-
-                    return res.status(200).json(userProfileResponse); // End GET request for user profile
-                } catch (error) {
-                    console.error("❌ Error retrieving user profile:", error);
-                    return res.status(500).json({ message: 'Error retrieving user profile', error });
-                }
-            }
-
-            return res.status(200).json(postsResponse); // Return the formatted posts with pagination info
-        } else {
-            // No usernames found, return posts without profile pictures
-            const formattedPosts = results.map(post => {
-                let photoUrl = null;
-                if (post.photo) {
-                    if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
-                        photoUrl = post.photo;
-                    } else {
-                        photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
-                    }
-                }
-
-                return {
-                    _id: post._id,
-                    message: post.message,
-                    timestamp: post.timestamp,
-                    username: post.username,
-                    sessionId: post.sessionId,
-                    likes: post.likes,
-                    dislikes: post.dislikes,
-                    likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
-                    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
-                    hearts: post.hearts,
-                    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
-                    photo: photoUrl,
-                    profilePicture: 'https://latestnewsandaffairs.site/public/pfp3.jpg' // Default profile picture
-                };
-            });
-
-            return res.status(200).json({ posts: formattedPosts, hasMorePosts: false });
+            const [[{ count }]] = await promisePool.execute(totalPostsQuery);
+            postsResponse.hasMorePosts = (parseInt(page, 10) * parseInt(limit, 10)) < count;
         }
+
+        // Fetch user profile if requested
+        if (username) {
+            const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
+            const [userResult] = await promisePool.execute(userQuery, [username]);
+
+            const userProfileResponse = userResult.length ? userResult[0] : {
+                username,
+                location: 'Location not available',
+                status: 'Status not available',
+                profession: 'Profession not available',
+                hobby: 'Hobby not available',
+                description: 'No description available',
+                profile_picture: 'No profile picture available'
+            };
+
+            return res.status(200).json(userProfileResponse);
+        }
+
+        return res.status(200).json(postsResponse);
+
     } catch (error) {
-        console.error("❌ Error retrieving posts:", error);
+        console.error('❌ Error retrieving posts:', error);
         return res.status(500).json({ message: 'Error retrieving posts', error });
     }
 }
