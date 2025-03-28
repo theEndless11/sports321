@@ -99,6 +99,7 @@ if (req.method === 'GET') {
             postsResponse.hasMorePosts = (parseInt(page, 10) * parseInt(limit, 10)) < count;
         }
 
+        return res.json(postsResponse);  // Send the final response with posts
         // Fetch user profile if requested
         if (username) {
             const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
