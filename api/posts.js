@@ -84,35 +84,35 @@ module.exports = async function handler(req, res) {
 
             let response = { posts: formattedPosts, hasMorePosts };
 
-            if (username) {
-                const userQuery = 'SELECT location, status, profession, hobby FROM users WHERE username = ?';
-                const [userResult] = await promisePool.execute(userQuery, [username]);
+// Handle GET requests for retrieving user profile information
+if (username) {
+    const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
+    const [userResult] = await promisePool.execute(userQuery, [username]);
 
-                if (userResult.length > 0) {
-                    const userData = userResult[0];
-                    response.location = userData.location || 'Location not available';
-                    response.status = userData.status || 'Status not available';
-                    response.profession = userData.profession || 'Profession not available';
-                    response.hobby = userData.hobby || 'Hobby not available';
-                } else {
-                    response.location = 'Location not available';
-                    response.status = 'Status not available';
-                    response.profession = 'Profession not available';
-                    response.hobby = 'Hobby not available';
-                }
-
-                const descriptionQuery = 'SELECT description FROM posts WHERE username = ?';
-                const [descriptionResult] = await promisePool.execute(descriptionQuery, [username]);
-                response.description = descriptionResult.length > 0 ? descriptionResult[0].description : 'No description available';
-            }
-
-            return res.status(200).json(response);
-
-        } catch (error) {
-            console.error("❌ Error retrieving posts:", error);
-            return res.status(500).json({ message: 'Error retrieving posts', error });
-        }
+    if (userResult.length > 0) {
+        const userData = userResult[0];
+        response.location = userData.location || 'Location not available';
+        response.status = userData.status || 'Status not available';
+        response.profession = userData.profession || 'Profession not available';
+        response.hobby = userData.hobby || 'Hobby not available';
+        response.description = userData.description || 'No description available';
+        response.profile_picture = userData.profile_picture || 'No profile picture available';
+    } else {
+        response.location = 'Location not available';
+        response.status = 'Status not available';
+        response.profession = 'Profession not available';
+        response.hobby = 'Hobby not available';
+        response.description = 'No description available';
+        response.profile_picture = 'No profile picture available';
     }
+
+    return res.status(200).json(response);
+} catch (error) {
+    console.error("❌ Error retrieving user profile:", error);
+    return res.status(500).json({ message: 'Error retrieving user profile', error });
+}
+
+
 // Handle POST requests for updating location, status, profession, hobby, description, and profile picture
 if (req.method === 'POST') {
     const { username, location, status, profession, hobby, description, profilePicture } = req.body;
@@ -122,7 +122,7 @@ if (req.method === 'POST') {
     }
 
     try {
-        // Update the location, status, profession, and hobby in the users table
+        // Update the location, status, profession, hobby in the users table
         if (location || status || profession || hobby) {
             const updateFields = [];
             const updateValues = [];
@@ -144,52 +144,46 @@ if (req.method === 'POST') {
                 updateValues.push(hobby);
             }
 
-            // Add the condition to the end
-            updateValues.push(username);  // Only add the username at the end
+            // Add the condition to the end (username)
+            updateValues.push(username);
 
             const updateQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE username = ?`;
 
-            // Execute the update query
+            // Execute the update query for location, status, profession, hobby
             await promisePool.execute(updateQuery, updateValues);
-            return res.status(200).json({ message: 'Profile updated successfully' });
         }
 
-        // Handle description and profile picture updates if needed
+        // Handle updating description and profile picture in the users table
         if (description || profilePicture) {
+            const updateFields = [];
+            const updateValues = [];
+
             if (description) {
-                await promisePool.execute('UPDATE posts SET description = ? WHERE username = ?', [description, username]);
+                updateFields.push('description = ?');
+                updateValues.push(description);
             }
             if (profilePicture) {
-                await promisePool.execute('UPDATE posts SET profile_picture = ? WHERE username = ?', [profilePicture, username]);
+                updateFields.push('profile_picture = ?');
+                updateValues.push(profilePicture);
             }
 
-            return res.status(200).json({ message: 'Profile updated successfully' });
+            // Add the condition to the end (username)
+            updateValues.push(username);
+
+            const updateQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE username = ?`;
+
+            // Execute the update query for description and profile picture
+            await promisePool.execute(updateQuery, updateValues);
         }
 
-        // If description is provided, update in posts table
-        if (description) {
-            if (description.trim() === '') {
-                return res.status(400).json({ message: 'Description cannot be empty' });
-            }
-            await promisePool.execute('UPDATE posts SET description = ? WHERE username = ?', [description, username]);
-            return res.status(200).json({ message: 'Description updated successfully' });
-        }
+        return res.status(200).json({ message: 'Profile updated successfully' });
 
-        // If profile picture is provided, update in posts table
-        if (profilePicture) {
-            const [result] = await promisePool.execute('UPDATE posts SET profile_picture = ? WHERE username = ?', [profilePicture, username]);
-            if (result.affectedRows === 0) {
-                return res.status(404).json({ message: 'User not found' });
-            }
-            return res.status(200).json({ message: 'Profile picture updated successfully' });
-        }
-
-        return res.status(400).json({ message: 'No valid data provided to update' });
     } catch (error) {
         console.error('❌ Error updating profile:', error);
         return res.status(500).json({ message: 'Error updating profile', error });
     }
 }
+
     // Handle unsupported methods
     return res.status(405).json({ message: 'Method Not Allowed' });
 };
