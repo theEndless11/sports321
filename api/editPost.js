@@ -110,39 +110,47 @@ else if (action === 'comment') {
         return res.status(400).json({ message: 'Comment cannot be empty' });
     }
 
-    // Get the user's profile picture from the database (replace 'Users' with the actual model)
-    const user = await Users.findOne({ username: username });
-    const userProfilePicture = user ? user.profile_picture : 'default-pfp.jpg'; // Fallback profile picture
+    // Get the user's profile picture from the database
+    try {
+        const [userResults] = await promisePool.query(
+            'SELECT profile_picture FROM users WHERE username = ?',
+            [username]  // Use the username passed in the request
+        );
 
-    // Generate a new `commentId` if not provided
-    const newCommentId = commentId || uuidv4();
+        // Check if the user exists, else fallback to default profile picture
+        const userProfilePicture = userResults.length > 0 ? userResults[0].profile_picture : 'default-pfp.jpg';
 
-    // Create a new comment object
-    const newComment = {
-        commentId: newCommentId,
-        username,
-        comment,
-        profilePicture: userProfilePicture, // Include the profile picture
-        timestamp: new Date(),
-        hearts: 0,
-        heartedBy: [], // Store users who hearted this comment
-        replies: []
-    };
+        // Generate a new `commentId` if not provided
+        const newCommentId = commentId || uuidv4();
 
-    // Add new comment to the post's `comments` array
-    post.comments.push(newComment);
+        // Create a new comment object
+        const newComment = {
+            commentId: newCommentId,
+            username,
+            comment,
+            profilePicture: userProfilePicture, // Include the profile picture
+            timestamp: new Date(),
+            hearts: 0,
+            heartedBy: [], // Store users who hearted this comment
+            replies: []
+        };
 
-    shouldUpdateDB = true;
+        // Add new comment to the post's `comments` array
+        post.comments.push(newComment);
+
+        shouldUpdateDB = true;
+
+    } catch (error) {
+        console.error("Error fetching user profile picture:", error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
 }
+
 // ✅ Handle "reply" action (Replying to a specific comment)
 else if (action === 'reply') {
     if (!reply || !reply.trim()) {
         return res.status(400).json({ message: 'Reply cannot be empty' });
     }
-
-    // Get the user's profile picture from the database (replace 'Users' with the actual model)
-    const user = await Users.findOne({ username: username });
-    const userProfilePicture = user ? user.profile_picture : 'default-pfp.jpg'; // Fallback profile picture
 
     // Find the target comment inside the post's `comments` array
     const targetCommentIndex = post.comments.findIndex(c => String(c.commentId) === String(commentId));
@@ -153,28 +161,44 @@ else if (action === 'reply') {
         // Ensure `replies` is always an array
         targetComment.replies = Array.isArray(targetComment.replies) ? targetComment.replies : [];
 
-        // Generate a unique `replyId` for tracking replies
-        const newReply = {
-            replyId: uuidv4(), // Unique ID for each reply
-            username,
-            reply,
-            profilePicture: userProfilePicture, // Include the profile picture in the reply
-            timestamp: new Date(),
-            hearts: 0,         // Track the number of hearts for this reply
-            heartedBy: []      // Track users who hearted this reply
-        };
+        // Get the user's profile picture from the database
+        try {
+            const [userResults] = await promisePool.query(
+                'SELECT profile_picture FROM users WHERE username = ?',
+                [username]  // Use the username of the user who is replying
+            );
 
-        // ✅ Push new reply inside the correct comment
-        targetComment.replies.push(newReply);
+            // Check if the user exists, else fallback to default profile picture
+            const userProfilePicture = userResults.length > 0 ? userResults[0].profile_picture : 'default-pfp.jpg';
 
-        // ✅ Update the post's comments array
-        post.comments[targetCommentIndex] = targetComment;
+            // Generate a unique `replyId` for tracking replies
+            const newReply = {
+                replyId: uuidv4(), // Unique ID for each reply
+                username,
+                reply,
+                profilePicture: userProfilePicture, // Include the profile picture
+                timestamp: new Date(),
+                hearts: 0,         // Track the number of hearts for this reply
+                heartedBy: []      // Track users who hearted this reply
+            };
 
-        shouldUpdateDB = true;
+            // Push new reply inside the correct comment
+            targetComment.replies.push(newReply);
+
+            // Update the post's comments array
+            post.comments[targetCommentIndex] = targetComment;
+
+            shouldUpdateDB = true;
+
+        } catch (error) {
+            console.error("Error fetching user profile picture for reply:", error);
+            return res.status(500).json({ message: 'Internal server error' });
+        }
     } else {
         return res.status(404).json({ message: 'Comment not found to reply to' });
     }
 }
+
 
 
  else {
