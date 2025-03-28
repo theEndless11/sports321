@@ -16,7 +16,7 @@ module.exports = async function handler(req, res) {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
 
-  // Handle GET requests for retrieving posts or user profile information
+ // Handle GET requests for retrieving posts or user profile information
 if (req.method === 'GET') {
     const { username_like, start_timestamp, end_timestamp, username, page, limit, sort } = req.query;
 
@@ -54,91 +54,127 @@ if (req.method === 'GET') {
         const [results] = await promisePool.execute(sqlQuery, queryParams);
 
         // Fetch user profile picture for each post's username
-        const usersQuery = 'SELECT username, profile_picture FROM users WHERE username IN (?)';
         const usernames = results.map(post => post.username);
-        const [usersResult] = await promisePool.execute(usersQuery, [usernames]);
 
-        const usersProfilePictures = usersResult.reduce((acc, user) => {
-            acc[user.username] = user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg'; // Default if not available
-            return acc;
-        }, {});
+        if (usernames.length > 0) {
+            // Dynamically create placeholders for IN clause
+            const placeholders = usernames.map(() => '?').join(',');
+            const usersQuery = `SELECT username, profile_picture FROM users WHERE username IN (${placeholders})`;
+            const [usersResult] = await promisePool.execute(usersQuery, usernames);
 
-        const formattedPosts = results.map(post => {
-            let photoUrl = null;
-            if (post.photo) {
-                if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
-                    photoUrl = post.photo;
-                } else {
-                    photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
+            const usersProfilePictures = usersResult.reduce((acc, user) => {
+                acc[user.username] = user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp3.jpg'; // Default if not available
+                return acc;
+            }, {});
+
+            const formattedPosts = results.map(post => {
+                let photoUrl = null;
+                if (post.photo) {
+                    if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
+                        photoUrl = post.photo;
+                    } else {
+                        photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
+                    }
+                }
+
+                return {
+                    _id: post._id,
+                    message: post.message,
+                    timestamp: post.timestamp,
+                    username: post.username,
+                    sessionId: post.sessionId,
+                    likes: post.likes,
+                    dislikes: post.dislikes,
+                    likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
+                    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
+                    hearts: post.hearts,
+                    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
+                    photo: photoUrl,
+                    profilePicture: usersProfilePictures[post.username] || 'https://latestnewsandaffairs.site/public/pfp.jpg' // Use profile picture from users table
+                };
+            });
+
+            // Fetch total posts for pagination
+            const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
+            const [totalPostsResult] = await promisePool.execute(totalPostsQuery);
+            const totalPosts = totalPostsResult[0].count;
+            const hasMorePosts = (pageNumber * pageSize) < totalPosts;
+
+            let postsResponse = { posts: formattedPosts, hasMorePosts };
+
+            // Handle GET requests for retrieving user profile information
+            if (username) {
+                const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture, username FROM users WHERE username = ?';
+                
+                try {
+                    const [userResult] = await promisePool.execute(userQuery, [username]);
+
+                    let userProfileResponse = {};
+
+                    if (userResult.length > 0) {
+                        const userData = userResult[0];
+                        userProfileResponse.username = userData.username;
+                        userProfileResponse.location = userData.location || 'Location not available';
+                        userProfileResponse.status = userData.status || 'Status not available';
+                        userProfileResponse.profession = userData.profession || 'Profession not available';
+                        userProfileResponse.hobby = userData.hobby || 'Hobby not available';
+                        userProfileResponse.description = userData.description || 'No description available';
+                        userProfileResponse.profile_picture = userData.profile_picture || 'No profile picture available';
+                    } else {
+                        userProfileResponse.username = username;
+                        userProfileResponse.location = 'Location not available';
+                        userProfileResponse.status = 'Status not available';
+                        userProfileResponse.profession = 'Profession not available';
+                        userProfileResponse.hobby = 'Hobby not available';
+                        userProfileResponse.description = 'No description available';
+                        userProfileResponse.profile_picture = 'No profile picture available';
+                    }
+
+                    return res.status(200).json(userProfileResponse); // End GET request for user profile
+                } catch (error) {
+                    console.error("❌ Error retrieving user profile:", error);
+                    return res.status(500).json({ message: 'Error retrieving user profile', error });
                 }
             }
 
-            return {
-                _id: post._id,
-                message: post.message,
-                timestamp: post.timestamp,
-                username: post.username,
-                sessionId: post.sessionId,
-                likes: post.likes,
-                dislikes: post.dislikes,
-                likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
-                dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
-                hearts: post.hearts,
-                comments: post.comments ? JSON.parse(post.comments || '[]') : [],
-                photo: photoUrl,
-                profilePicture: usersProfilePictures[post.username] || 'https://latestnewsandaffairs.site/public/pfp3.jpg' // Use profile picture from users table
-            };
-        });
-
-        // Fetch total posts for pagination
-        const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
-        const [totalPostsResult] = await promisePool.execute(totalPostsQuery);
-        const totalPosts = totalPostsResult[0].count;
-        const hasMorePosts = (pageNumber * pageSize) < totalPosts;
-
-        let postsResponse = { posts: formattedPosts, hasMorePosts };
-
-        // Handle GET requests for retrieving user profile information
-        if (username) {
-            const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture, username FROM users WHERE username = ?';
-            
-            try {
-                const [userResult] = await promisePool.execute(userQuery, [username]);
-
-                let userProfileResponse = {};
-
-                if (userResult.length > 0) {
-                    const userData = userResult[0];
-                    userProfileResponse.username = userData.username;
-                    userProfileResponse.location = userData.location || 'Location not available';
-                    userProfileResponse.status = userData.status || 'Status not available';
-                    userProfileResponse.profession = userData.profession || 'Profession not available';
-                    userProfileResponse.hobby = userData.hobby || 'Hobby not available';
-                    userProfileResponse.description = userData.description || 'No description available';
-                    userProfileResponse.profile_picture = userData.profile_picture || 'No profile picture available';
-                } else {
-                    userProfileResponse.username = username;
-                    userProfileResponse.location = 'Location not available';
-                    userProfileResponse.status = 'Status not available';
-                    userProfileResponse.profession = 'Profession not available';
-                    userProfileResponse.hobby = 'Hobby not available';
-                    userProfileResponse.description = 'No description available';
-                    userProfileResponse.profile_picture = 'No profile picture available';
+            return res.status(200).json(postsResponse); // Return the formatted posts with pagination info
+        } else {
+            // No usernames found, return posts without profile pictures
+            const formattedPosts = results.map(post => {
+                let photoUrl = null;
+                if (post.photo) {
+                    if (post.photo.startsWith('http') || post.photo.startsWith('data:image/')) {
+                        photoUrl = post.photo;
+                    } else {
+                        photoUrl = `data:image/jpeg;base64,${post.photo.toString('base64')}`;
+                    }
                 }
 
-                return res.status(200).json(userProfileResponse); // End GET request for user profile
-            } catch (error) {
-                console.error("❌ Error retrieving user profile:", error);
-                return res.status(500).json({ message: 'Error retrieving user profile', error });
-            }
+                return {
+                    _id: post._id,
+                    message: post.message,
+                    timestamp: post.timestamp,
+                    username: post.username,
+                    sessionId: post.sessionId,
+                    likes: post.likes,
+                    dislikes: post.dislikes,
+                    likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
+                    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
+                    hearts: post.hearts,
+                    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
+                    photo: photoUrl,
+                    profilePicture: 'https://latestnewsandaffairs.site/public/pfp3.jpg' // Default profile picture
+                };
+            });
+
+            return res.status(200).json({ posts: formattedPosts, hasMorePosts: false });
         }
-
-        return res.status(200).json(postsResponse); // Return the formatted posts with pagination info
     } catch (error) {
         console.error("❌ Error retrieving posts:", error);
         return res.status(500).json({ message: 'Error retrieving posts', error });
     }
 }
+
 
 
     // Handle POST requests for updating location, status, profession, hobby, description, and profile picture
