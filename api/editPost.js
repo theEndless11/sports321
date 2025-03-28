@@ -110,6 +110,10 @@ else if (action === 'comment') {
         return res.status(400).json({ message: 'Comment cannot be empty' });
     }
 
+    // Get the user's profile picture from the database (replace 'Users' with the actual model)
+    const user = await Users.findOne({ username: username });
+    const userProfilePicture = user ? user.profile_picture : 'default-pfp.jpg'; // Fallback profile picture
+
     // Generate a new `commentId` if not provided
     const newCommentId = commentId || uuidv4();
 
@@ -118,6 +122,7 @@ else if (action === 'comment') {
         commentId: newCommentId,
         username,
         comment,
+        profilePicture: userProfilePicture, // Include the profile picture
         timestamp: new Date(),
         hearts: 0,
         heartedBy: [], // Store users who hearted this comment
@@ -129,12 +134,15 @@ else if (action === 'comment') {
 
     shouldUpdateDB = true;
 }
-
 // ✅ Handle "reply" action (Replying to a specific comment)
 else if (action === 'reply') {
     if (!reply || !reply.trim()) {
         return res.status(400).json({ message: 'Reply cannot be empty' });
     }
+
+    // Get the user's profile picture from the database (replace 'Users' with the actual model)
+    const user = await Users.findOne({ username: username });
+    const userProfilePicture = user ? user.profile_picture : 'default-pfp.jpg'; // Fallback profile picture
 
     // Find the target comment inside the post's `comments` array
     const targetCommentIndex = post.comments.findIndex(c => String(c.commentId) === String(commentId));
@@ -150,6 +158,7 @@ else if (action === 'reply') {
             replyId: uuidv4(), // Unique ID for each reply
             username,
             reply,
+            profilePicture: userProfilePicture, // Include the profile picture in the reply
             timestamp: new Date(),
             hearts: 0,         // Track the number of hearts for this reply
             heartedBy: []      // Track users who hearted this reply
@@ -166,6 +175,7 @@ else if (action === 'reply') {
         return res.status(404).json({ message: 'Comment not found to reply to' });
     }
 }
+
 
  else {
             return res.status(400).json({ message: 'Invalid action type' });
