@@ -70,9 +70,9 @@ if (req.method === 'GET') {
                 dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
                 hearts: post.hearts,
                 comments: post.comments ? JSON.parse(post.comments) : [],
-                photo: post.photo?.startsWith('http') || post.photo?.startsWith('data:image/') 
-                    ? post.photo 
-                    : `data:image/jpeg;base64,${post.photo.toString('base64')}`,
+                photo: post.photo && (post.photo.startsWith('http') || post.photo.startsWith('data:image/'))
+                    ? post.photo
+                    : post.photo ? `data:image/jpeg;base64,${post.photo.toString('base64')}` : null,
                 profilePicture: usersMap[post.username] || 'https://latestnewsandaffairs.site/public/pfp.jpg'
             }));
 
@@ -106,8 +106,6 @@ if (req.method === 'GET') {
         return res.status(500).json({ message: 'Error retrieving posts', error });
     }
 }
-
-
 
     // Handle POST requests for updating location, status, profession, hobby, description, and profile picture
     if (req.method === 'POST') {
