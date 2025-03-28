@@ -54,8 +54,13 @@ if (req.method === 'GET') {
             const usersQuery = `SELECT username, profile_picture FROM users WHERE username IN (${usernames.map(() => '?').join(',')})`;
             const [usersResult] = await promisePool.execute(usersQuery, usernames);
 
+            // Log users' profile picture data to verify it's being fetched correctly
+            console.log('Users Profile Pictures:', usersResult);
+
             // Create a map of username to profile picture
             const usersMap = usersResult.reduce((acc, user) => {
+                // Log each user's profile picture
+                console.log(`User: ${user.username}, Profile Picture: ${user.profile_picture}`);
                 acc[user.username] = user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg';
                 return acc;
             }, {});
@@ -99,7 +104,6 @@ if (req.method === 'GET') {
             postsResponse.hasMorePosts = (parseInt(page, 10) * parseInt(limit, 10)) < count;
         }
 
-        return res.json(postsResponse);  // Send the final response with posts
         // Fetch user profile if requested
         if (username) {
             const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
