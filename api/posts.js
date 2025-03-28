@@ -59,9 +59,15 @@ if (req.method === 'GET') {
 
             // Create a map of username to profile picture
             const usersMap = usersResult.reduce((acc, user) => {
-                // Log each user's profile picture
-                console.log(`User: ${user.username}, Profile Picture: ${user.profile_picture}`);
-                acc[user.username] = user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg';
+                // If the user has a profile picture (either a valid URL or Base64 string), use it
+                if (user.profile_picture) {
+                    acc[user.username] = user.profile_picture.startsWith('data:image') 
+                        ? user.profile_picture  // Use Base64 encoded string directly
+                        : user.profile_picture; // Use the URL path
+                } else {
+                    // Fallback for users who don't have a profile picture
+                    acc[user.username] = 'https://latestnewsandaffairs.site/public/pfp.jpg';
+                }
                 return acc;
             }, {});
 
