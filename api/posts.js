@@ -86,42 +86,49 @@ module.exports = async function handler(req, res) {
             const totalPosts = totalPostsResult[0].count;
             const hasMorePosts = (pageNumber * pageSize) < totalPosts;
 
-            let response = { posts: formattedPosts, hasMorePosts };
+            let postsResponse = { posts: formattedPosts, hasMorePosts };
 
-// Handle GET requests for retrieving user profile information
-if (username) {
-    const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture, username FROM users WHERE username = ?';
-    
-    try {
-        const [userResult] = await promisePool.execute(userQuery, [username]);
+            // Handle GET requests for retrieving user profile information
+            if (username) {
+                const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture, username FROM users WHERE username = ?';
+                
+                try {
+                    const [userResult] = await promisePool.execute(userQuery, [username]);
 
-        const response = {};
+                    let userProfileResponse = {};
 
-        if (userResult.length > 0) {
-            const userData = userResult[0];
-            response.username = userData.username;
-            response.location = userData.location || 'Location not available';
-            response.status = userData.status || 'Status not available';
-            response.profession = userData.profession || 'Profession not available';
-            response.hobby = userData.hobby || 'Hobby not available';
-            response.description = userData.description || 'No description available';
-            response.profile_picture = userData.profile_picture || 'No profile picture available';
-        } else {
-            response.username = username;
-            response.location = 'Location not available';
-            response.status = 'Status not available';
-            response.profession = 'Profession not available';
-            response.hobby = 'Hobby not available';
-            response.description = 'No description available';
-            response.profile_picture = 'No profile picture available';
+                    if (userResult.length > 0) {
+                        const userData = userResult[0];
+                        userProfileResponse.username = userData.username;
+                        userProfileResponse.location = userData.location || 'Location not available';
+                        userProfileResponse.status = userData.status || 'Status not available';
+                        userProfileResponse.profession = userData.profession || 'Profession not available';
+                        userProfileResponse.hobby = userData.hobby || 'Hobby not available';
+                        userProfileResponse.description = userData.description || 'No description available';
+                        userProfileResponse.profile_picture = userData.profile_picture || 'No profile picture available';
+                    } else {
+                        userProfileResponse.username = username;
+                        userProfileResponse.location = 'Location not available';
+                        userProfileResponse.status = 'Status not available';
+                        userProfileResponse.profession = 'Profession not available';
+                        userProfileResponse.hobby = 'Hobby not available';
+                        userProfileResponse.description = 'No description available';
+                        userProfileResponse.profile_picture = 'No profile picture available';
+                    }
+
+                    return res.status(200).json(userProfileResponse); // End GET request for user profile
+                } catch (error) {
+                    console.error("❌ Error retrieving user profile:", error);
+                    return res.status(500).json({ message: 'Error retrieving user profile', error });
+                }
+            }
+
+            return res.status(200).json(postsResponse); // Return the formatted posts with pagination info
+        } catch (error) {
+            console.error("❌ Error retrieving posts:", error);
+            return res.status(500).json({ message: 'Error retrieving posts', error });
         }
-
-        return res.status(200).json(response); // End GET request for user profile
-    } catch (error) {
-        console.error("❌ Error retrieving user profile:", error);
-        return res.status(500).json({ message: 'Error retrieving user profile', error });
     }
-}
 
     // Handle POST requests for updating location, status, profession, hobby, description, and profile picture
     if (req.method === 'POST') {
