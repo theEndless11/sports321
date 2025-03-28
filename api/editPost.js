@@ -104,8 +104,6 @@ else if (action === 'heart') {
     }
 }
 
-hey could it be that we are missing backend logic for profile , get profile for comment and replies from users column containing profile_picture with username 
-
 // ✅ Handle "comment" action (Adding a new comment to a post)
 else if (action === 'comment') {
     if (!comment || !comment.trim()) {
