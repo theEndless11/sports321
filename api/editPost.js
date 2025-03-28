@@ -128,7 +128,7 @@ else if (action === 'comment') {
             commentId: newCommentId,
             username,
             comment,
-            profilePicture: userProfilePicture, // Include the profile picture
+            profilePicture: userProfilePicture, // Store only the reference (URL or path)
             timestamp: new Date(),
             hearts: 0,
             heartedBy: [], // Store users who hearted this comment
@@ -176,7 +176,7 @@ else if (action === 'reply') {
                 replyId: uuidv4(), // Unique ID for each reply
                 username,
                 reply,
-                profilePicture: userProfilePicture, // Include the profile picture
+                profilePicture: userProfilePicture, // Store only the reference (URL or path)
                 timestamp: new Date(),
                 hearts: 0,         // Track the number of hearts for this reply
                 heartedBy: []      // Track users who hearted this reply
@@ -198,8 +198,6 @@ else if (action === 'reply') {
         return res.status(404).json({ message: 'Comment not found to reply to' });
     }
 }
-
-
 
  else {
             return res.status(400).json({ message: 'Invalid action type' });
