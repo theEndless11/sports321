@@ -59,11 +59,15 @@ if (req.method === 'GET') {
 
             // Create a map of username to profile picture
             const usersMap = usersResult.reduce((acc, user) => {
-                // If the user has a profile picture (either a valid URL or Base64 string), use it
+                // Check if user has a profile picture
                 if (user.profile_picture) {
-                    acc[user.username] = user.profile_picture.startsWith('data:image') 
-                        ? user.profile_picture  // Use Base64 encoded string directly
-                        : user.profile_picture; // Use the URL path
+                    // If profile_picture is in Base64 format, use it directly
+                    if (user.profile_picture.startsWith('data:image')) {
+                        acc[user.username] = user.profile_picture;
+                    } else {
+                        // If it's not Base64, treat it as a URL
+                        acc[user.username] = `data:image/jpeg;base64,${user.profile_picture}`;
+                    }
                 } else {
                     // Fallback for users who don't have a profile picture
                     acc[user.username] = 'https://latestnewsandaffairs.site/public/pfp.jpg';
@@ -77,7 +81,7 @@ if (req.method === 'GET') {
                 const enrichedComments = (post.comments ? JSON.parse(post.comments) : []).map(comment => {
                     return {
                         ...comment,
-                        profilePicture: usersMap[comment.username] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
+                        profilePicture: usersMap[comment.username] || 'https://latestnewsandaffairs.site/public/pfp3.jpg',
                         replies: comment.replies.map(reply => ({
                             ...reply,
                             profilePicture: usersMap[reply.username] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
@@ -100,7 +104,7 @@ if (req.method === 'GET') {
                     photo: post.photo && (post.photo.startsWith('http') || post.photo.startsWith('data:image/'))
                         ? post.photo
                         : post.photo ? `data:image/jpeg;base64,${post.photo.toString('base64')}` : null,
-                    profilePicture: usersMap[post.username] || 'https://latestnewsandaffairs.site/public/pfp.jpg',  // Assign profile picture from map
+                    profilePicture: usersMap[post.username] || 'https://latestnewsandaffairs.site/public/pfp2.jpg',  // Assign profile picture from map
                 };
             });
 
@@ -109,6 +113,8 @@ if (req.method === 'GET') {
             const [[{ count }]] = await promisePool.execute(totalPostsQuery);
             postsResponse.hasMorePosts = (parseInt(page, 10) * parseInt(limit, 10)) < count;
         }
+
+
         // Fetch user profile if requested
         if (username) {
             const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
