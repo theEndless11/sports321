@@ -43,14 +43,14 @@ if (req.method === 'GET') {
     sqlQuery += ` ORDER BY ${sortOptions[sort] || 'timestamp DESC'} LIMIT ? OFFSET ?`;
     queryParams.push(parseInt(limit, 10), offset);
 
-  try {
+try {
     const [results] = await promisePool.execute(sqlQuery, queryParams);
     const usernames = [...new Set(results.map(post => post.username))];
 
     let postsResponse = { posts: [], hasMorePosts: false };
 
     if (usernames.length) {
-        // Query to get profile picture of users
+        // Query to get profile pictures of users
         const usersQuery = `SELECT username, profile_picture FROM users WHERE username IN (${usernames.map(() => '?').join(',')})`;
         const [usersResult] = await promisePool.execute(usersQuery, usernames);
 
@@ -63,30 +63,35 @@ if (req.method === 'GET') {
             if (user.profile_picture) {
                 // If profile_picture is in Base64 format, use it directly
                 if (user.profile_picture.startsWith('data:image')) {
-                    acc[user.username] = user.profile_picture; // Use Base64 directly
+                    acc[user.username.toLowerCase()] = user.profile_picture; // Ensure case consistency
                 } else {
-                    acc[user.username] = `data:image/jpeg;base64,${user.profile_picture}`; // Convert if not Base64
+                    acc[user.username.toLowerCase()] = `data:image/jpeg;base64,${user.profile_picture}`; // Convert if not Base64
                 }
             } else {
-                acc[user.username] = 'https://latestnewsandaffairs.site/public/pfp3.jpg'; // Fallback for missing profile pictures
+                acc[user.username.toLowerCase()] = 'https://latestnewsandaffairs.site/public/pfp3.jpg'; // Fallback for missing profile pictures
             }
             return acc;
         }, {});
-        
+
         console.log('Users Map:', usersMap); // Debugging line to show the mapping
 
         // Process each post, comments, and replies to add profile pictures
         postsResponse.posts = results.map(post => {
             // Enrich comments with profile pictures
             const enrichedComments = (post.comments ? JSON.parse(post.comments) : []).map(comment => {
+                const commentUsername = comment.username ? comment.username.toLowerCase() : ''; // Ensure case consistency
                 console.log(`Enriching comment from user: ${comment.username}`); // Debugging line
+
                 return {
                     ...comment,
-                    profilePicture: usersMap[comment.username] || 'https://latestnewsandaffairs.site/public/pfp3.jpg',
-                    replies: comment.replies.map(reply => ({
-                        ...reply,
-                        profilePicture: usersMap[reply.username] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
-                    }))
+                    profilePicture: usersMap[commentUsername] || 'https://latestnewsandaffairs.site/public/pfp3.jpg', // Fallback profile picture
+                    replies: comment.replies.map(reply => {
+                        const replyUsername = reply.username ? reply.username.toLowerCase() : ''; // Ensure case consistency
+                        return {
+                            ...reply,
+                            profilePicture: usersMap[replyUsername] || 'https://latestnewsandaffairs.site/public/pfp.jpg', // Fallback profile picture
+                        };
+                    })
                 };
             });
 
@@ -105,7 +110,7 @@ if (req.method === 'GET') {
                 photo: post.photo && (post.photo.startsWith('http') || post.photo.startsWith('data:image/'))
                     ? post.photo
                     : post.photo ? `data:image/jpeg;base64,${post.photo.toString('base64')}` : null,
-                profilePicture: usersMap[post.username] || 'https://latestnewsandaffairs.site/public/pfp2.jpg',  // Assign profile picture from map
+                profilePicture: usersMap[post.username.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp2.jpg',  // Assign profile picture from map
             };
         });
 
@@ -114,7 +119,6 @@ if (req.method === 'GET') {
         const [[{ count }]] = await promisePool.execute(totalPostsQuery);
         postsResponse.hasMorePosts = (parseInt(page, 10) * parseInt(limit, 10)) < count;
     }
-
         // Fetch user profile if requested
         if (username) {
             const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
