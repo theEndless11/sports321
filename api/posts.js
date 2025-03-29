@@ -43,77 +43,77 @@ if (req.method === 'GET') {
     sqlQuery += ` ORDER BY ${sortOptions[sort] || 'timestamp DESC'} LIMIT ? OFFSET ?`;
     queryParams.push(parseInt(limit, 10), offset);
 
-    try {
-        const [results] = await promisePool.execute(sqlQuery, queryParams);
-        const usernames = [...new Set(results.map(post => post.username))];
+  try {
+    const [results] = await promisePool.execute(sqlQuery, queryParams);
+    const usernames = [...new Set(results.map(post => post.username))];
 
-        let postsResponse = { posts: [], hasMorePosts: false };
+    let postsResponse = { posts: [], hasMorePosts: false };
 
-        if (usernames.length) {
-            // Query to get profile picture of users
-            const usersQuery = `SELECT username, profile_picture FROM users WHERE username IN (${usernames.map(() => '?').join(',')})`;
-            const [usersResult] = await promisePool.execute(usersQuery, usernames);
+    if (usernames.length) {
+        // Query to get profile picture of users
+        const usersQuery = `SELECT username, profile_picture FROM users WHERE username IN (${usernames.map(() => '?').join(',')})`;
+        const [usersResult] = await promisePool.execute(usersQuery, usernames);
 
-            // Log users' profile picture data to verify it's being fetched correctly
-            console.log('Users Profile Pictures:', usersResult);
+        // Log users' profile picture data to verify it's being fetched correctly
+        console.log('Users Profile Pictures:', usersResult);
 
-            // Create a map of username to profile picture
-            const usersMap = usersResult.reduce((acc, user) => {
-                // Check if user has a profile picture
-                if (user.profile_picture) {
-                    // If profile_picture is in Base64 format, use it directly
-                    if (user.profile_picture.startsWith('data:image')) {
-                        acc[user.username] = user.profile_picture;
-                    } else {
-                        // If it's not Base64, treat it as a URL
-                        acc[user.username] = `data:image/jpeg;base64,${user.profile_picture}`;
-                    }
+        // Create a map of username to profile picture
+        const usersMap = usersResult.reduce((acc, user) => {
+            console.log(`Checking profile for ${user.username}`); // Debugging line
+            if (user.profile_picture) {
+                // If profile_picture is in Base64 format, use it directly
+                if (user.profile_picture.startsWith('data:image')) {
+                    acc[user.username] = user.profile_picture; // Use Base64 directly
                 } else {
-                    // Fallback for users who don't have a profile picture
-                    acc[user.username] = 'https://latestnewsandaffairs.site/public/pfp.jpg';
+                    acc[user.username] = `data:image/jpeg;base64,${user.profile_picture}`; // Convert if not Base64
                 }
-                return acc;
-            }, {});
+            } else {
+                acc[user.username] = 'https://latestnewsandaffairs.site/public/pfp3.jpg'; // Fallback for missing profile pictures
+            }
+            return acc;
+        }, {});
+        
+        console.log('Users Map:', usersMap); // Debugging line to show the mapping
 
-            // Process each post, comments, and replies to add profile pictures
-            postsResponse.posts = results.map(post => {
-                // Enrich comments with profile pictures
-                const enrichedComments = (post.comments ? JSON.parse(post.comments) : []).map(comment => {
-                    return {
-                        ...comment,
-                        profilePicture: usersMap[comment.username] || 'https://latestnewsandaffairs.site/public/pfp3.jpg',
-                        replies: comment.replies.map(reply => ({
-                            ...reply,
-                            profilePicture: usersMap[reply.username] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
-                        }))
-                    };
-                });
-
+        // Process each post, comments, and replies to add profile pictures
+        postsResponse.posts = results.map(post => {
+            // Enrich comments with profile pictures
+            const enrichedComments = (post.comments ? JSON.parse(post.comments) : []).map(comment => {
+                console.log(`Enriching comment from user: ${comment.username}`); // Debugging line
                 return {
-                    _id: post._id,
-                    message: post.message,
-                    timestamp: post.timestamp,
-                    username: post.username,
-                    sessionId: post.sessionId,
-                    likes: post.likes,
-                    dislikes: post.dislikes,
-                    likedBy: post.likedBy ? JSON.parse(post.likedBy) : [],
-                    dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
-                    hearts: post.hearts,
-                    comments: enrichedComments,
-                    photo: post.photo && (post.photo.startsWith('http') || post.photo.startsWith('data:image/'))
-                        ? post.photo
-                        : post.photo ? `data:image/jpeg;base64,${post.photo.toString('base64')}` : null,
-                    profilePicture: usersMap[post.username] || 'https://latestnewsandaffairs.site/public/pfp2.jpg',  // Assign profile picture from map
+                    ...comment,
+                    profilePicture: usersMap[comment.username] || 'https://latestnewsandaffairs.site/public/pfp3.jpg',
+                    replies: comment.replies.map(reply => ({
+                        ...reply,
+                        profilePicture: usersMap[reply.username] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
+                    }))
                 };
             });
 
-            // Total posts count
-            const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
-            const [[{ count }]] = await promisePool.execute(totalPostsQuery);
-            postsResponse.hasMorePosts = (parseInt(page, 10) * parseInt(limit, 10)) < count;
-        }
+            return {
+                _id: post._id,
+                message: post.message,
+                timestamp: post.timestamp,
+                username: post.username,
+                sessionId: post.sessionId,
+                likes: post.likes,
+                dislikes: post.dislikes,
+                likedBy: post.likedBy ? JSON.parse(post.likedBy) : [],
+                dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
+                hearts: post.hearts,
+                comments: enrichedComments,
+                photo: post.photo && (post.photo.startsWith('http') || post.photo.startsWith('data:image/'))
+                    ? post.photo
+                    : post.photo ? `data:image/jpeg;base64,${post.photo.toString('base64')}` : null,
+                profilePicture: usersMap[post.username] || 'https://latestnewsandaffairs.site/public/pfp2.jpg',  // Assign profile picture from map
+            };
+        });
 
+        // Total posts count
+        const totalPostsQuery = 'SELECT COUNT(*) AS count FROM posts';
+        const [[{ count }]] = await promisePool.execute(totalPostsQuery);
+        postsResponse.hasMorePosts = (parseInt(page, 10) * parseInt(limit, 10)) < count;
+    }
 
         // Fetch user profile if requested
         if (username) {
