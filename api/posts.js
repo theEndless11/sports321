@@ -109,7 +109,6 @@ if (req.method === 'GET') {
             const [[{ count }]] = await promisePool.execute(totalPostsQuery);
             postsResponse.hasMorePosts = (parseInt(page, 10) * parseInt(limit, 10)) < count;
         }
-
         // Fetch user profile if requested
         if (username) {
             const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
