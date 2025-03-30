@@ -31,8 +31,8 @@ if (req.method === 'GET') {
     }
 
     const sortOptions = {
+         'most-liked': 'likes DESC',
          'most-comments': 'CHAR_LENGTH(comments) DESC',
-        'most-liked': 'likes DESC',
         'newest': 'timestamp DESC'
     };
     sqlQuery += ` ORDER BY ${sortOptions[sort] || 'timestamp DESC'} LIMIT ? OFFSET ?`;
@@ -57,14 +57,19 @@ if (req.method === 'GET') {
                 return acc;
             }, {});
 
+            // Debug log: Check the usersMap for correct mapping
+            console.log('Users Map:', usersMap);
+
             // Process posts and enrich comments
             postsResponse.posts = results.map(post => {
                 // Enriching comments with profile pictures
                 const enrichedComments = (post.comments ? JSON.parse(post.comments) : []).map(comment => ({
                     ...comment,
+                    // Ensure the username is in lowercase to match the profile picture mapping
                     profilePicture: usersMap[comment.username?.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
                     replies: (comment.replies || []).map(reply => ({
                         ...reply,
+                        // Ensure the reply's username is also in lowercase
                         profilePicture: usersMap[reply.username?.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
                     }))
                 }));
