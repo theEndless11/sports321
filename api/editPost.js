@@ -163,6 +163,10 @@ else if (action === 'heart reply') {
 
     if (targetCommentIndex !== -1) {
         const targetComment = post.comments[targetCommentIndex];
+        
+        // Ensure replies is an array
+        targetComment.replies = Array.isArray(targetComment.replies) ? targetComment.replies : [];
+        
         const targetReplyIndex = targetComment.replies.findIndex(r => String(r.replyId) === String(replyId));
 
         if (targetReplyIndex !== -1) {
@@ -171,16 +175,23 @@ else if (action === 'heart reply') {
             targetReply.hearts = targetReply.hearts || 0;
 
             if (targetReply.heartedBy.includes(username)) {
+                // Unheart the reply
                 targetReply.hearts -= 1;
                 targetReply.heartedBy = targetReply.heartedBy.filter(user => user !== username);
             } else {
+                // Heart the reply
                 targetReply.hearts += 1;
                 targetReply.heartedBy.push(username);
             }
 
+            // Update the reply and comment
             targetComment.replies[targetReplyIndex] = targetReply;
             post.comments[targetCommentIndex] = targetComment;
+
             shouldUpdateDB = true;
+
+            // Send back the updated post
+            return res.json(post);
         } else {
             return res.status(404).json({ message: 'Reply not found to heart' });
         }
@@ -188,6 +199,7 @@ else if (action === 'heart reply') {
         return res.status(404).json({ message: 'Comment not found to reply to' });
     }
 }
+
  else {
             return res.status(400).json({ message: 'Invalid action type' });
         }
