@@ -31,8 +31,8 @@ if (req.method === 'GET') {
     }
 
     const sortOptions = {
+         'most-comments': 'CHAR_LENGTH(comments) DESC',
         'most-liked': 'likes DESC',
-        'most-comments': 'CHAR_LENGTH(comments) DESC',
         'newest': 'timestamp DESC'
     };
     sqlQuery += ` ORDER BY ${sortOptions[sort] || 'timestamp DESC'} LIMIT ? OFFSET ?`;
