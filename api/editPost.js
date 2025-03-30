@@ -191,7 +191,7 @@ else if (action === 'heart reply') {
             shouldUpdateDB = true;
 
             // Send back the updated post
-            return res.json(post);
+            return res.json({ comments: post.comments }); // Ensure `comments` is returned explicitly
         } else {
             return res.status(404).json({ message: 'Reply not found to heart' });
         }
