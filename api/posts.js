@@ -57,9 +57,6 @@ if (req.method === 'GET') {
                 return acc;
             }, {});
 
-            // Debug log: Check the usersMap for correct mapping
-            console.log('Users Map:', usersMap);
-
             // Process posts and enrich comments
             postsResponse.posts = results.map(post => {
                 // Enriching comments with profile pictures
