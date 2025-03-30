@@ -93,7 +93,7 @@ module.exports = async function handler(req, res) {
             targetComment.replies.push(newReply);
             shouldUpdateDB = true;
         } else if (action === 'heart reply') {
-            const targetComment = post.comments.find(c => String(c.commentId) === String(commentId));
+            const targetComment = post.comments.find(c => String(c.commentId) === String(replyId));
             if (!targetComment) return res.status(404).json({ message: 'Comment not found to reply to' });
 
             const targetReply = targetComment.replies.find(r => String(r.replyId) === String(replyId));
