@@ -187,9 +187,7 @@ else if (action === 'heart reply') {
     } else {
         return res.status(404).json({ message: 'Comment not found to reply to' });
     }
-}
-
-
+    
 
  else {
             return res.status(400).json({ message: 'Invalid action type' });
