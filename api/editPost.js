@@ -95,33 +95,6 @@ else if (action === 'heart comment') {
         return res.status(404).json({ message: 'Comment not found to heart' });
     }
 }
-
-// ✅ Handle "comment" action (Adding a new comment to a post)
-else if (action === 'comment') {
-    if (!comment || !comment.trim()) {
-        return res.status(400).json({ message: 'Comment cannot be empty' });
-    }
-
-    // Generate a new `commentId` if not provided
-    const newCommentId = commentId || uuidv4();
-
-    // Create a new comment object
-    const newComment = {
-        commentId: newCommentId,
-        username,
-        comment,
-        timestamp: new Date(),
-        hearts: 0,
-        heartedBy: [], // Store users who hearted this comment
-        replies: []
-    };
-
-    // Add new comment to the post's `comments` array
-    post.comments.push(newComment);
-
-    shouldUpdateDB = true;
-}
-
 // ✅ Handle "reply" action (Replying to a specific comment)
 else if (action === 'reply') {
     if (!reply || !reply.trim()) {
@@ -198,6 +171,31 @@ else if (action === 'heart reply') {
     } else {
         return res.status(404).json({ message: 'Comment not found to reply to' });
     }
+}
+// ✅ Handle "comment" action (Adding a new comment to a post)
+else if (action === 'comment') {
+    if (!comment || !comment.trim()) {
+        return res.status(400).json({ message: 'Comment cannot be empty' });
+    }
+
+    // Generate a new `commentId` if not provided
+    const newCommentId = commentId || uuidv4();
+
+    // Create a new comment object
+    const newComment = {
+        commentId: newCommentId,
+        username,
+        comment,
+        timestamp: new Date(),
+        hearts: 0,
+        heartedBy: [], // Store users who hearted this comment
+        replies: []
+    };
+
+    // Add new comment to the post's `comments` array
+    post.comments.push(newComment);
+
+    shouldUpdateDB = true;
 }
 
  else {
