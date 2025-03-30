@@ -26,7 +26,7 @@ module.exports = async function handler(req, res) {
 
         try {
             // Fetch user details (excluding profile_picture) from the users table
-            const userQuery = 'SELECT location, status, profession, hobby FROM users WHERE username = ?';
+            const userQuery = 'SELECT location, status, profession, hobby, profile_picture, description FROM users WHERE username = ?';
             const [userResult] = await promisePool.execute(userQuery, [username]);
 
             // If no user is found, return 404
@@ -37,7 +37,7 @@ module.exports = async function handler(req, res) {
             const user = userResult[0];
 
             // Fetch posts from posts table (including profile_picture and description)
-            const postsQuery = 'SELECT _id, message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, profile_picture, description FROM posts WHERE username = ?';
+            const postsQuery = 'SELECT _id, message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo FROM posts WHERE username = ?';
             const [postsResult] = await promisePool.execute(postsQuery, [username]);
 
             // Format the posts to include the correct image URL
