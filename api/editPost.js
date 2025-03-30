@@ -18,7 +18,7 @@ module.exports = async function handler(req, res) {
 
     setCorsHeaders(res);
 
-    const { postId, username, action, comment, reply, commentId } = req.body;
+    const { postId, username, action, comment, reply, commentId, replyId } = req.body;
 
     if (!postId || !action || !username) {
         return res.status(400).json({ message: 'Post ID, action, and username are required' });
