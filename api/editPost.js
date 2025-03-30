@@ -93,16 +93,36 @@ module.exports = async function handler(req, res) {
             targetComment.replies.push(newReply);
             shouldUpdateDB = true;
         } else if (action === 'heart reply') {
-            const targetComment = post.comments.find(c => String(c.commentId) === String(replyId));
-            if (!targetComment) return res.status(404).json({ message: 'Comment not found to reply to' });
+    const targetComment = post.comments.find(c => String(c.commentId) === String(commentId));
+    if (!targetComment) {
+        return res.status(404).json({ message: 'Comment not found to reply to', comments: post.comments || [] });
+    }
 
-            const targetReply = targetComment.replies.find(r => String(r.replyId) === String(replyId));
-            if (!targetReply) return res.status(404).json({ message: 'Reply not found to heart' });
+    // Ensure `replies` is an array
+    targetComment.replies = targetComment.replies || [];
 
-            targetReply.heartedBy = targetReply.heartedBy || [];
-            targetReply.hearts = targetReply.hearts || 0;
-            shouldUpdateDB = handleHeart(targetReply, action, username);
-        } else if (action === 'comment') {
+    const targetReply = targetComment.replies.find(r => String(r.replyId) === String(replyId));
+    if (!targetReply) {
+        return res.status(404).json({ message: 'Reply not found to heart', comments: post.comments || [] });
+    }
+
+    // Ensure `heartedBy` is an array
+    targetReply.heartedBy = targetReply.heartedBy || [];
+    targetReply.hearts = targetReply.hearts || 0;
+
+    // Handle hearting and unhearting the reply
+    if (targetReply.heartedBy.includes(username)) {
+        targetReply.hearts -= 1;
+        targetReply.heartedBy = targetReply.heartedBy.filter(user => user !== username);
+    } else {
+        targetReply.hearts += 1;
+        targetReply.heartedBy.push(username);
+    }
+
+    // Update the post's comments with the modified reply
+    shouldUpdateDB = true;
+}
+ else if (action === 'comment') {
             if (!comment || !comment.trim()) return res.status(400).json({ message: 'Comment cannot be empty' });
 
             const newComment = {
