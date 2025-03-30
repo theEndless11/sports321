@@ -132,12 +132,12 @@ else if (action === 'reply') {
     }
 }
 else if (action === 'heart reply') {
-    const targetCommentIndex = post.comments.findIndex(c => String(c.commentId) === String(commentId));
+    const targetCommentIndex = post.comments ? post.comments.findIndex(c => String(c.commentId) === String(commentId)) : -1;
 
     if (targetCommentIndex !== -1) {
         const targetComment = post.comments[targetCommentIndex];
 
-        // Ensure `replies` is always an array
+        // ✅ Ensure `replies` is always an array
         targetComment.replies = Array.isArray(targetComment.replies) ? targetComment.replies : [];
 
         const targetReplyIndex = targetComment.replies.findIndex(r => String(r.replyId) === String(replyId));
@@ -164,15 +164,16 @@ else if (action === 'heart reply') {
 
             shouldUpdateDB = true;
         } else {
-            return res.status(404).json({ message: 'Reply not found to heart', comments: post.comments });
+            return res.status(404).json({ message: 'Reply not found to heart', comments: post.comments || [] });
         }
     } else {
-        return res.status(404).json({ message: 'Comment not found to reply to', comments: post.comments });
+        return res.status(404).json({ message: 'Comment not found to reply to', comments: post.comments || [] });
     }
 
-    // ✅ Always return `comments`
+    // ✅ Always return `comments` properly
     return res.json({ comments: post.comments || [] });
 }
+
 
 // ✅ Handle "comment" action (Adding a new comment to a post)
 else if (action === 'comment') {
