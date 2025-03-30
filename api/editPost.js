@@ -136,14 +136,15 @@ else if (action === 'heart reply') {
 
     if (targetCommentIndex !== -1) {
         const targetComment = post.comments[targetCommentIndex];
-        
-        // Ensure replies is an array
+
+        // Ensure `replies` is always an array
         targetComment.replies = Array.isArray(targetComment.replies) ? targetComment.replies : [];
-        
+
         const targetReplyIndex = targetComment.replies.findIndex(r => String(r.replyId) === String(replyId));
 
         if (targetReplyIndex !== -1) {
             const targetReply = targetComment.replies[targetReplyIndex];
+
             targetReply.heartedBy = Array.isArray(targetReply.heartedBy) ? targetReply.heartedBy : [];
             targetReply.hearts = targetReply.hearts || 0;
 
@@ -157,21 +158,22 @@ else if (action === 'heart reply') {
                 targetReply.heartedBy.push(username);
             }
 
-            // Update the reply and comment
+            // Update reply and comment
             targetComment.replies[targetReplyIndex] = targetReply;
             post.comments[targetCommentIndex] = targetComment;
 
             shouldUpdateDB = true;
-
-            // Send back the updated post
-            return res.json({ comments: post.comments }); // Ensure `comments` is returned explicitly
         } else {
-            return res.status(404).json({ message: 'Reply not found to heart' });
+            return res.status(404).json({ message: 'Reply not found to heart', comments: post.comments });
         }
     } else {
-        return res.status(404).json({ message: 'Comment not found to reply to' });
+        return res.status(404).json({ message: 'Comment not found to reply to', comments: post.comments });
     }
+
+    // ✅ Always return `comments`
+    return res.json({ comments: post.comments || [] });
 }
+
 // ✅ Handle "comment" action (Adding a new comment to a post)
 else if (action === 'comment') {
     if (!comment || !comment.trim()) {
