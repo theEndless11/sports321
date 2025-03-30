@@ -59,6 +59,7 @@ if (req.method === 'GET') {
 
             // Process posts and enrich comments
             postsResponse.posts = results.map(post => {
+                // Enriching comments with profile pictures
                 const enrichedComments = (post.comments ? JSON.parse(post.comments) : []).map(comment => ({
                     ...comment,
                     profilePicture: usersMap[comment.username?.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
@@ -68,6 +69,7 @@ if (req.method === 'GET') {
                     }))
                 }));
 
+                // Enrich post with profile picture
                 return {
                     _id: post._id,
                     message: post.message,
@@ -93,8 +95,7 @@ if (req.method === 'GET') {
             postsResponse.hasMorePosts = (parseInt(page, 10) * parseInt(limit, 10)) < totalResult[0].count;
         }
 
-
-            // Fetch user profile if requested
+               // Fetch user profile if requested
             if (username) {
                 try {
                     const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
