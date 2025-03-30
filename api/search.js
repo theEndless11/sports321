@@ -15,7 +15,7 @@ module.exports = async function handler(req, res) {
         return res.status(200).end(); // End the request immediately after sending a response for OPTIONS
     }
 
-    if (req.method === 'GET') {
+        if (req.method === 'GET') {
         const { username } = req.query;
 
         if (!username) {
@@ -32,6 +32,9 @@ module.exports = async function handler(req, res) {
             }
 
             const user = userResult[0];
+
+            // Ensure there's a valid profile picture
+            const userProfilePicture = user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg';
 
             // Fetch posts related to the user
             const postsQuery = 'SELECT _id, message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo FROM posts WHERE username = ?';
@@ -52,6 +55,7 @@ module.exports = async function handler(req, res) {
                 photo: post.photo 
                     ? (post.photo.startsWith('http') || post.photo.startsWith('data:image/') ? post.photo : `data:image/jpeg;base64,${post.photo.toString('base64')}`)
                     : null,
+                profilePicture: userProfilePicture,  // Ensure post profile picture matches user profile picture
             }));
 
             // Response payload
@@ -62,7 +66,7 @@ module.exports = async function handler(req, res) {
                     status: user.status || 'Status not available',
                     profession: user.profession || 'Profession not available',
                     hobby: user.hobby || 'Hobby not available',
-                    profile_picture: user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg',
+                    profile_picture: userProfilePicture, // User's profile picture
                     description: user.description || 'No description available',
                 },
                 posts: formattedPosts,
