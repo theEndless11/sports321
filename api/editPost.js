@@ -158,17 +158,27 @@ else if (action === 'heart reply') {
                 targetReply.heartedBy.push(username);
             }
 
-            // Update reply and comment
+            // ✅ Update reply and comment
             targetComment.replies[targetReplyIndex] = targetReply;
             post.comments[targetCommentIndex] = targetComment;
 
             shouldUpdateDB = true;
+
+            // ✅ Save changes to the database  
+            await promisePool.execute(
+                'UPDATE posts SET comments = ? WHERE _id = ?',
+                [JSON.stringify(post.comments), post._id]  // Save as JSON string
+            );
+
+            return res.json({ comments: post.comments });
         } else {
             return res.status(404).json({ message: 'Reply not found to heart', comments: post.comments || [] });
         }
     } else {
         return res.status(404).json({ message: 'Comment not found to reply to', comments: post.comments || [] });
     }
+}
+
 
     // ✅ Always return `comments` properly
     return res.json({ comments: post.comments || [] });
