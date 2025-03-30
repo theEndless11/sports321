@@ -158,7 +158,7 @@ else if (action === 'reply') {
         return res.status(404).json({ message: 'Comment not found to reply to' });
     }
 }
-  else if (action === 'heart reply') {
+else if (action === 'heart reply') {
     const targetCommentIndex = post.comments.findIndex(c => String(c.commentId) === String(commentId));
 
     if (targetCommentIndex !== -1) {
@@ -188,6 +188,7 @@ else if (action === 'reply') {
         return res.status(404).json({ message: 'Comment not found to reply to' });
     }
 }
+
 
 
  else {
