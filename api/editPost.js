@@ -73,31 +73,23 @@ module.exports = async function handler(req, res) {
             }
             shouldUpdateDB = true;
         }
-// ✅ Handle "heart" action (Hearting a specific comment inside a post)
-else if (action === 'heart') {
-    // Find the target comment by `commentId`
+else if (action === 'heart comment') {
     const targetCommentIndex = post.comments.findIndex(c => String(c.commentId) === String(commentId));
 
     if (targetCommentIndex !== -1) {
         const targetComment = post.comments[targetCommentIndex];
-
-        // Ensure `heartedBy` is always an array
         targetComment.heartedBy = Array.isArray(targetComment.heartedBy) ? targetComment.heartedBy : [];
         targetComment.hearts = targetComment.hearts || 0;
 
         if (targetComment.heartedBy.includes(username)) {
-            // Remove heart only if the same user is toggling their own heart
             targetComment.hearts -= 1;
             targetComment.heartedBy = targetComment.heartedBy.filter(user => user !== username);
         } else {
-            // Add heart if a new user is hearting this comment
             targetComment.hearts += 1;
             targetComment.heartedBy.push(username);
         }
 
-        // ✅ Update the comment inside the `post.comments` array
         post.comments[targetCommentIndex] = targetComment;
-
         shouldUpdateDB = true;
     } else {
         return res.status(404).json({ message: 'Comment not found to heart' });
@@ -166,6 +158,37 @@ else if (action === 'reply') {
         return res.status(404).json({ message: 'Comment not found to reply to' });
     }
 }
+    else if (action === 'heart reply') {
+    const targetCommentIndex = post.comments.findIndex(c => String(c.commentId) === String(commentId));
+
+    if (targetCommentIndex !== -1) {
+        const targetComment = post.comments[targetCommentIndex];
+        const targetReplyIndex = targetComment.replies.findIndex(r => String(r.replyId) === String(replyId));
+
+        if (targetReplyIndex !== -1) {
+            const targetReply = targetComment.replies[targetReplyIndex];
+            targetReply.heartedBy = Array.isArray(targetReply.heartedBy) ? targetReply.heartedBy : [];
+            targetReply.hearts = targetReply.hearts || 0;
+
+            if (targetReply.heartedBy.includes(username)) {
+                targetReply.hearts -= 1;
+                targetReply.heartedBy = targetReply.heartedBy.filter(user => user !== username);
+            } else {
+                targetReply.hearts += 1;
+                targetReply.heartedBy.push(username);
+            }
+
+            targetComment.replies[targetReplyIndex] = targetReply;
+            post.comments[targetCommentIndex] = targetComment;
+            shouldUpdateDB = true;
+        } else {
+            return res.status(404).json({ message: 'Reply not found to heart' });
+        }
+    } else {
+        return res.status(404).json({ message: 'Comment not found to reply to' });
+    }
+}
+
  else {
             return res.status(400).json({ message: 'Invalid action type' });
         }
