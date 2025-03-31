@@ -34,60 +34,17 @@ const handlePostUpdate = async (id, message, timestamp, username) => {
     return { status: 200, message: 'Post updated successfully', post };
 };
 
-const handleCommentDeletion = async (postId, commentId, username, sessionId) => {
-    const [posts] = await promisePool.execute('SELECT * FROM posts WHERE _id = ?', [postId]);
-
-    if (!posts.length) return { status: 404, message: 'Post not found' };
-
-    const post = posts[0];
-
-    // Ensure post.comments is an array, even if it's null or undefined
-    const comments = Array.isArray(post.comments) ? post.comments : [];
-
-    const commentIndex = comments.findIndex(c => String(c.commentId) === String(commentId));
-
-    if (commentIndex === -1) return { status: 404, message: 'Comment not found' };
-
-    const comment = comments[commentIndex];
-
-    // Check if the logged-in user matches the comment's username or sessionId
-    if (comment.username !== username && sessionId !== comment.sessionId) {
-        return { status: 403, message: 'Unauthorized to delete this comment' };
-    }
-
-    // Remove the comment from the comments array
-    comments.splice(commentIndex, 1);
-
-    // Update the post in the database
-    await promisePool.execute('UPDATE posts SET comments = ? WHERE _id = ?', [JSON.stringify(comments), postId]);
-
-    return { status: 200, message: 'Comment deleted successfully', comments };
-};
-
-
 export default async function handler(req, res) {
     setCorsHeaders(res);
 
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    const { postId, commentId, username, sessionId, id, message, timestamp } = req.body;
+    const { postId, username, sessionId, id, message, timestamp } = req.body;
 
     if (req.method === 'DELETE') {
-        // Handle post deletion if no commentId is provided
-        if (postId && !commentId) {
-            if (!postId || !username || !sessionId) return res.status(400).json({ message: 'Missing required fields' });
-            const result = await handlePostDeletion(postId, username);
-            return res.status(result.status).json({ message: result.message });
-        }
-
-        // Handle comment deletion if commentId is provided
-        if (postId && commentId) {
-            if (!postId || !commentId || !username || !sessionId) {
-                return res.status(400).json({ message: 'Missing required fields for comment deletion' });
-            }
-            const result = await handleCommentDeletion(postId, commentId, username, sessionId);
-            return res.status(result.status).json({ message: result.message, comments: result.comments });
-        }
+        if (!postId || !username || !sessionId) return res.status(400).json({ message: 'Missing required fields' });
+        const result = await handlePostDeletion(postId, username);
+        return res.status(result.status).json({ message: result.message });
     }
 
     if (req.method === 'PUT') {
@@ -98,4 +55,3 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ message: 'Method Not Allowed' });
 }
-
