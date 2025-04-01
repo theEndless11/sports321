@@ -72,3 +72,4 @@ try {
     console.error("Error deleting comment:", error);
     res.status(500).json({ message: 'Error deleting comment', error });
 }
+  };
