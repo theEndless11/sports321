@@ -1,17 +1,25 @@
+const cors = require('cors');
 const { promisePool } = require('../utils/db'); // MySQL connection pool
-const fs = require('fs'); // File system module for local file deletion
 
-// Set CORS headers for all methods
-const setCorsHeaders = (res) => {
-    res.setHeader('Access-Control-Allow-Origin', 'https://latestnewsandaffairs.site'); // Replace with your frontend URL
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+// Configure CORS options
+const corsOptions = {
+    origin: 'https://latestnewsandaffairs.site', // Set your frontend URL
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type']
 };
 
-// Server-side delete comment handler
+// Helper function to handle CORS manually (since it's serverless)
+const setCorsHeaders = (res) => {
+    res.setHeader('Access-Control-Allow-Origin', corsOptions.origin);
+    res.setHeader('Access-Control-Allow-Methods', corsOptions.methods.join(', '));
+    res.setHeader('Access-Control-Allow-Headers', corsOptions.allowedHeaders.join(', '));
+};
+
+// Serverless delete comment handler
 module.exports = async function handler(req, res) {
     setCorsHeaders(res);
 
+    // Handle preflight requests
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
@@ -64,3 +72,4 @@ module.exports = async function handler(req, res) {
         res.status(500).json({ message: 'Error deleting comment', error });
     }
 };
+
