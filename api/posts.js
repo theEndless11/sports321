@@ -119,7 +119,7 @@ if (username) {
                 profession: 'Profession not available',
                 hobby: 'Hobby not available',
                 description: 'No description available',
-                profile_picture: 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture if none found
+                profile_picture: 'https://latestnewsandaffairs.site/public/pfp3.jpg', // Default profile picture if none found
             });
         }
     } catch (userError) {
