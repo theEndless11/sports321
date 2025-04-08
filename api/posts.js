@@ -100,26 +100,35 @@ if (req.method === 'GET') {
 // Fetch user profile if requested
 if (username) {
     try {
+        // Assuming profile_picture is stored as a binary blob in the database
         const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
         const [userResult] = await promisePool.execute(userQuery, [username]);
 
-        // If profile exists, return the profile data, otherwise return default data
-        return res.status(200).json(userResult.length ? userResult[0] : {
-            username,
-            location: 'Location not available',
-            status: 'Status not available',
-            profession: 'Profession not available',
-            hobby: 'Hobby not available',
-            description: 'No description available',
-            profile_picture: 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture
-        });
+        if (userResult.length) {
+            // Convert profile_picture from binary to Base64 string if it exists
+            if (userResult[0].profile_picture) {
+                const base64ProfilePicture = userResult[0].profile_picture.toString('base64');
+                userResult[0].profile_picture = `data:image/jpeg;base64,${base64ProfilePicture}`; // Assuming the image is in JPEG format
+            }
+            return res.status(200).json(userResult[0]);
+        } else {
+            return res.status(200).json({
+                username,
+                location: 'Location not available',
+                status: 'Status not available',
+                profession: 'Profession not available',
+                hobby: 'Hobby not available',
+                description: 'No description available',
+                profile_picture: 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture if none found
+            });
+        }
     } catch (userError) {
         console.error('❌ Error retrieving user profile:', userError);
         return res.status(500).json({ message: 'Error retrieving user profile', error: userError });
     }
 }
 
-return res.status(200).json(postsResponse);  // Fetch posts data
+return res.status(200).json(postsResponse); // Fetch posts data
 
 
         } catch (error) {
