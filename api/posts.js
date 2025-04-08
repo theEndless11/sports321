@@ -100,15 +100,14 @@ if (req.method === 'GET') {
 // Fetch user profile if requested
 if (username) {
     try {
-        // Assuming profile_picture is stored as a binary blob in the database
         const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
         const [userResult] = await promisePool.execute(userQuery, [username]);
 
         if (userResult.length) {
             // Convert profile_picture from binary to Base64 string if it exists
             if (userResult[0].profile_picture) {
-                const base64ProfilePicture = userResult[0].profile_picture.toString('base64');
-                userResult[0].profile_picture = `data:image/jpeg;base64,${base64ProfilePicture}`; // Assuming the image is in JPEG format
+                const base64ProfilePicture = userResult[0].profile_picture.toString('base64'); // Convert binary data to Base64
+                userResult[0].profile_picture = `data:image/jpeg;base64,${base64ProfilePicture}`; // Assuming JPEG format
             }
             return res.status(200).json(userResult[0]);
         } else {
@@ -119,7 +118,7 @@ if (username) {
                 profession: 'Profession not available',
                 hobby: 'Hobby not available',
                 description: 'No description available',
-                profile_picture: 'https://latestnewsandaffairs.site/public/pfp3.jpg', // Default profile picture if none found
+                profile_picture: 'https://latestnewsandaffairs.site/public/pfp2.jpg', // Default profile picture if none found
             });
         }
     } catch (userError) {
@@ -129,7 +128,6 @@ if (username) {
 }
 
 return res.status(200).json(postsResponse); // Fetch posts data
-
 
         } catch (error) {
             console.error('❌ Error retrieving posts:', error);
