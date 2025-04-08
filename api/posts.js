@@ -104,11 +104,7 @@ if (username) {
         const [userResult] = await promisePool.execute(userQuery, [username]);
 
         if (userResult.length) {
-            // Convert profile_picture from binary to Base64 string if it exists
-            if (userResult[0].profile_picture) {
-                const base64ProfilePicture = userResult[0].profile_picture.toString('base64'); // Convert binary data to Base64
-                userResult[0].profile_picture = `data:image/jpeg;base64,${base64ProfilePicture}`; // Assuming JPEG format
-            }
+            // If profile_picture exists, it should already be in Base64 format (in your case it is)
             return res.status(200).json(userResult[0]);
         } else {
             return res.status(200).json({
@@ -118,7 +114,7 @@ if (username) {
                 profession: 'Profession not available',
                 hobby: 'Hobby not available',
                 description: 'No description available',
-                profile_picture: 'https://latestnewsandaffairs.site/public/pfp2.jpg', // Default profile picture if none found
+                profile_picture: 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture if none found
             });
         }
     } catch (userError) {
