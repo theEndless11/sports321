@@ -97,28 +97,30 @@ if (req.method === 'GET') {
             postsResponse.hasMorePosts = (parseInt(page, 10) * parseInt(limit, 10)) < totalResult[0].count;
         }
 
-               // Fetch user profile if requested
-            if (username) {
-                try {
-                    const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
-                    const [userResult] = await promisePool.execute(userQuery, [username]);
+// Fetch user profile if requested
+if (username) {
+    try {
+        const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
+        const [userResult] = await promisePool.execute(userQuery, [username]);
 
-                    return res.status(200).json(userResult.length ? userResult[0] : {
-                        username,
-                        location: 'Location not available',
-                        status: 'Status not available',
-                        profession: 'Profession not available',
-                        hobby: 'Hobby not available',
-                        description: 'No description available',
-                        profile_picture: 'https://latestnewsandaffairs.site/public/pfp.jpg',
-                    });
-                } catch (userError) {
-                    console.error('❌ Error retrieving user profile:', userError);
-                    return res.status(500).json({ message: 'Error retrieving user profile', error: userError });
-                }
-            }
+        // If profile exists, return the profile data, otherwise return default data
+        return res.status(200).json(userResult.length ? userResult[0] : {
+            username,
+            location: 'Location not available',
+            status: 'Status not available',
+            profession: 'Profession not available',
+            hobby: 'Hobby not available',
+            description: 'No description available',
+            profile_picture: 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture
+        });
+    } catch (userError) {
+        console.error('❌ Error retrieving user profile:', userError);
+        return res.status(500).json({ message: 'Error retrieving user profile', error: userError });
+    }
+}
 
-            return res.status(200).json(postsResponse);
+return res.status(200).json(postsResponse);  // Fetch posts data
+
 
         } catch (error) {
             console.error('❌ Error retrieving posts:', error);
