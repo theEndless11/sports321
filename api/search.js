@@ -38,7 +38,6 @@ module.exports = async function handler(req, res) {
             if (userResult.length === 0) {
                 return res.status(404).json({ message: 'User not found' });
             }
-
             const user = userResult[0];
 
             // Ensure there's a valid profile picture
