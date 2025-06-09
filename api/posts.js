@@ -1,26 +1,14 @@
 const { promisePool } = require('../utils/db'); // MySQL connection pool
 
 // Set CORS headers
-const allowedOrigins = [
-  'http://localhost:5173',  // Vite default
-  'http://127.0.0.1:5173',
-  'https://your-production-domain.com', // Add your production domain
-];
-
-const setCorsHeaders = (req, res) => {
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+const setCorsHeaders = (res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');  
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');  
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');  
 };
 
-
 module.exports = async function handler(req, res) {
-   setCorsHeaders(req, res); // now passes req too
+  setCorsHeaders(res); 
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
