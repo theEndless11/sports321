@@ -2,7 +2,7 @@ const { promisePool } = require('../utils/db');
 
 // Set CORS headers for all methods
 const setCorsHeaders = (res) => {
-    res.setHeader('Access-Control-Allow-Origin', 'https://latestnewsandaffairs.site'); // Replace with your frontend URL
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Replace with your frontend URL
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 };
