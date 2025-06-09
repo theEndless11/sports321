@@ -24,7 +24,15 @@ module.exports = async function handler(req, res) {
 
         try {
             // Fetch user details (including profile_picture)
-            const userQuery = 'SELECT location, status, profession, hobby, profile_picture, description FROM users WHERE username = ?';
+                const userQuery = `
+      SELECT 
+        location, status, profession, hobby, profile_picture, description,
+        followers_count AS followersCount,
+        following_count AS followingCount,
+        friends_count AS friendsCount
+      FROM users 
+      WHERE username = ?
+    `;
             const [userResult] = await promisePool.execute(userQuery, [username]);
 
             if (userResult.length === 0) {
@@ -68,6 +76,9 @@ module.exports = async function handler(req, res) {
                     hobby: user.hobby || 'Hobby not available',
                     profile_picture: userProfilePicture, // User's profile picture
                     description: user.description || 'No description available',
+                   followersCount: user.followersCount || 0,
+                   followingCount: user.followingCount || 0,
+                   friendsCount: user.friendsCount || 0,
                 },
                 posts: formattedPosts,
             };
