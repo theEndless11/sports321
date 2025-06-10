@@ -8,7 +8,7 @@ const RELATIONSHIP = {
   ACCEPTED: 'accepted',
 };
 
-// === CORS Settings (Use specific domains in production) ===
+// === CORS Settings ===
 const corsOptions = {
   origin: ['*', 'http://localhost:5173'],
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -21,9 +21,14 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { action } = req.body;
+  const { action, currentUser, targetUser } = req.body;
 
   try {
+    // Default to checking relationship status if no action specified
+    if (!action && currentUser && targetUser) {
+      return await getRelationshipStatus(req, res);
+    }
+
     switch (action) {
       case 'follow':
         return await followUser(req, res);
@@ -63,6 +68,9 @@ async function followUser(req, res) {
     [follower, following, RELATIONSHIP.FOLLOWING]
   );
 
+  // Update follower count
+  await updateFollowerCount(following, 1);
+
   return res.status(201).json({ success: true, message: 'Followed successfully' });
 }
 
@@ -71,10 +79,15 @@ async function unfollowUser(req, res) {
   if (!follower || !following)
     return res.status(400).json({ error: 'Invalid usernames' });
 
-  await promisePool.execute(
+  const [result] = await promisePool.execute(
     'DELETE FROM follows WHERE follower = ? AND following = ? AND relationship_status = ?',
     [follower, following, RELATIONSHIP.FOLLOWING]
   );
+
+  // Only update count if a row was actually deleted
+  if (result.affectedRows > 0) {
+    await updateFollowerCount(following, -1);
+  }
 
   return res.status(200).json({ success: true, message: 'Unfollowed successfully' });
 }
@@ -107,7 +120,16 @@ async function addFriend(req, res) {
         'INSERT INTO follows (follower, following, relationship_status) VALUES (?, ?, ?)',
         [requester, recipient, RELATIONSHIP.ACCEPTED]
       );
+    } else {
+      await promisePool.execute(
+        'UPDATE follows SET relationship_status = ? WHERE follower = ? AND following = ?',
+        [RELATIONSHIP.ACCEPTED, requester, recipient]
+      );
     }
+
+    // Update friends count for both users
+    await updateFriendsCount(requester, 1);
+    await updateFriendsCount(recipient, 1);
 
     return res.status(200).json({ success: true, message: 'Friend request accepted' });
   }
@@ -134,10 +156,24 @@ async function removeFriend(req, res) {
   if (!requester || !recipient)
     return res.status(400).json({ error: 'Invalid usernames' });
 
+  // Check if they were friends before removing
+  const [friendshipCheck] = await promisePool.execute(
+    'SELECT relationship_status FROM follows WHERE ((follower = ? AND following = ?) OR (follower = ? AND following = ?)) AND relationship_status = ?',
+    [requester, recipient, recipient, requester, RELATIONSHIP.ACCEPTED]
+  );
+
+  const wereFriends = friendshipCheck.length > 0;
+
   await promisePool.execute(
     'DELETE FROM follows WHERE (follower = ? AND following = ?) OR (follower = ? AND following = ?)',
     [requester, recipient, recipient, requester]
   );
+
+  // Update friends count if they were actually friends
+  if (wereFriends) {
+    await updateFriendsCount(requester, -1);
+    await updateFriendsCount(recipient, -1);
+  }
 
   return res.status(200).json({ success: true, message: 'Friendship removed or request cancelled' });
 }
@@ -175,4 +211,25 @@ async function getRelationshipStatus(req, res) {
   return res.status(200).json({ isFollowing, friendshipStatus });
 }
 
+// === Helper Functions ===
+async function updateFollowerCount(username, increment) {
+  try {
+    await promisePool.execute(
+      'UPDATE users SET followers_count = GREATEST(0, COALESCE(followers_count, 0) + ?) WHERE username = ?',
+      [increment, username]
+    );
+  } catch (error) {
+    console.error('Error updating follower count:', error);
+  }
+}
 
+async function updateFriendsCount(username, increment) {
+  try {
+    await promisePool.execute(
+      'UPDATE users SET friends_count = GREATEST(0, COALESCE(friends_count, 0) + ?) WHERE username = ?',
+      [increment, username]
+    );
+  } catch (error) {
+    console.error('Error updating friends count:', error);
+  }
+}
