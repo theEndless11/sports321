@@ -131,6 +131,7 @@ module.exports = async function handler(req, res) {
             const response = {
                 user: {
                     username: username,
+                    id: user.id,
                     location: user.location || 'Location not available',
                     status: user.status || 'Status not available',
                     profession: user.profession || 'Profession not available',
