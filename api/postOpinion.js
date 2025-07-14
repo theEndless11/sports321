@@ -52,8 +52,28 @@ const setCorsHeaders = (req, res) => {
 
             let photoUrl = photo || null;
 
-            // Use provided tags or extract from message
+             // Use provided tags or extract from message
             const extractedTags = tags || (message ? [...new Set(message.match(/@(\w+)/g)?.map(tag => tag.slice(1)) || [])] : []);
+
+            // Validate replyTo if provided
+            let replyToData = null;
+            if (replyTo && replyTo.postId) {
+                const [replyPost] = await promisePool.execute(
+                    'SELECT _id, username, message, photo, timestamp FROM posts WHERE _id = ?',
+                    [replyTo.postId]
+                );
+                if (replyPost.length > 0) {
+                    replyToData = {
+                        postId: replyPost[0]._id,
+                        username: replyPost[0].username,
+                        message: replyPost[0].message,
+                        photo: replyPost[0].photo,
+                        timestamp: replyPost[0].timestamp
+                    };
+                } else {
+                    return res.status(400).json({ message: 'Replied-to post not found' });
+                }
+            }
 
             // Insert new post into the posts table
             const [result] = await promisePool.execute(
