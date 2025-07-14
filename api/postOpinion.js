@@ -2,22 +2,18 @@ const { promisePool } = require('../utils/db');
 const { publishToAbly } = require('../utils/ably');
 
 // Set CORS headers
-const setCorsHeaders = (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-    res.setHeader('Cache-Control', 'no-cache');
+const setCorsHeaders = (res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');  
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');  
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');  
 };
 
-// Handle post actions (creating, liking, disliking)
-const handler = async (req, res) => {
+module.exports = async function handler(req, res) {
+  setCorsHeaders(res); 
+
     if (req.method === 'OPTIONS') {
-        setCorsHeaders(req, res);
         return res.status(200).end();
     }
-
-    setCorsHeaders(req, res);
-
     // POST: Create new post
     if (req.method === 'POST') {
         const { message, username, sessionId, photo, replyTo } = req.body;
