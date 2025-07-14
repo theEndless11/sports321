@@ -25,7 +25,7 @@ const setCorsHeaders = (req, res) => {
   setCorsHeaders(req, res); // 🟢 Still apply to regular requests
 
     // POST: Create new post
-  if (req.method === 'POST') {
+    if (req.method === 'POST') {
         const { message, username, sessionId, photo, userId, profilePic, tags } = req.body;
 
         if (!username || !sessionId) {
@@ -183,7 +183,6 @@ const setCorsHeaders = (req, res) => {
             return res.status(500).json({ message: 'Error updating post', error });
         }
     }
-
     // Handle other methods
     return res.status(405).json({ message: 'Method Not Allowed' });
 };
