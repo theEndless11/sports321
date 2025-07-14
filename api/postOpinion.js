@@ -57,8 +57,8 @@ const setCorsHeaders = (req, res) => {
 
             // Insert new post into the posts table
             const [result] = await promisePool.execute(
-                `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, tags)
-                 VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?)`,
+                `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, tags,replyTo)
+                 VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
                 [
                     message || '',
                     username,
@@ -83,7 +83,8 @@ const setCorsHeaders = (req, res) => {
                 comments: [],
                 photo: photoUrl,
                 profilePicture,
-                tags: extractedTags
+              tags: extractedTags,
+                replyTo: replyToData
             };
             
             // Publish the new post to Ably
@@ -164,7 +165,8 @@ const setCorsHeaders = (req, res) => {
                 comments: JSON.parse(post.comments),
                 photo: post.photo,
                 profilePicture: post.profilePicture,
-                tags: JSON.parse(post.tags || '[]')
+               tags: JSON.parse(post.tags || '[]'),
+                replyTo: JSON.parse(post.replyTo || 'null')
             };
 
             try {
