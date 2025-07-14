@@ -16,12 +16,14 @@ const setCorsHeaders = (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
-  const handler = async (req, res) => {
- setCorsHeaders(req, res);
+ const handler = async (req, res) => {
+  if (req.method === 'OPTIONS') {
+    setCorsHeaders(req, res); // ✅ CORS headers for preflight
+    return res.status(200).end();
+  }
 
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
+  setCorsHeaders(req, res); // 🟢 Still apply to regular requests
+
     // POST: Create new post
     if (req.method === 'POST') {
         const { message, username, sessionId, photo, replyTo } = req.body;
