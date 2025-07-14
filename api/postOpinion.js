@@ -37,18 +37,18 @@ const setCorsHeaders = (req, res) => {
         }
 
         try {
-            let profilePicture = profilePic || 'https://latestnewsandaffairs.site/public/pfp1.jpg';
-
+            let profilePicture = 'https://latestnewsandaffairs.site/public/pfp1.jpg'; // Default picture
             // Fetch profile picture from the users table based on username if not provided
-            if (!profilePic) {
-                const [userResult] = await promisePool.execute(
-                    'SELECT profile_picture FROM users WHERE username = ? LIMIT 1',
-                    [username]
-                );
-                if (userResult.length > 0 && userResult[0].profile_picture) {
-                    profilePicture = userResult[0].profile_picture;
-                }
-            }
+    
+        const [userResult] = await promisePool.execute(
+            'SELECT profile_picture FROM users WHERE username = ? LIMIT 1',
+            [username]
+        );
+
+        // If a profile picture is found for the user, use it
+        if (userResult.length > 0 && userResult[0].profile_picture) {
+            profilePicture = userResult[0].profile_picture;
+        }
 
             let photoUrl = photo || null;
 
@@ -57,8 +57,8 @@ const setCorsHeaders = (req, res) => {
 
             // Insert new post into the posts table
             const [result] = await promisePool.execute(
-                `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, profilePicture, tags)
-                 VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, tags)
+                 VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?)`,
                 [
                     message || '',
                     username,
@@ -67,7 +67,6 @@ const setCorsHeaders = (req, res) => {
                     '[]',
                     '[]',
                     photoUrl,
-                    profilePicture,
                     JSON.stringify(extractedTags)
                 ]
             );
@@ -86,7 +85,7 @@ const setCorsHeaders = (req, res) => {
                 profilePicture,
                 tags: extractedTags
             };
-
+            
             // Publish the new post to Ably
             try {
                 await publishToAbly('newOpinion', newPost);
