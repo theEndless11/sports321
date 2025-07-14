@@ -58,18 +58,22 @@ if (req.method === 'GET') {
             }, {});
 
             // Process posts and enrich comments
-            postsResponse.posts = results.map(post => {
-                // Enriching comments with profile pictures
-                const enrichedComments = (post.comments ? JSON.parse(post.comments) : []).map(comment => ({
-                    ...comment,
-                    // Ensure the username is in lowercase to match the profile picture mapping
-                    profilePicture: usersMap[comment.username?.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
-                    replies: (comment.replies || []).map(reply => ({
-                        ...reply,
-                        // Ensure the reply's username is also in lowercase
-                        profilePicture: usersMap[reply.username?.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
-                    }))
-                }));
+             postsResponse.posts = results.map(post => {
+                    // Enrich comments with profile pictures
+                    const enrichedComments = (post.comments ? JSON.parse(post.comments) : []).map(comment => ({
+                        ...comment,
+                        profilePicture: usersMap[comment.username?.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
+                        replies: (comment.replies || []).map(reply => ({
+                            ...reply,
+                            profilePicture: usersMap[reply.username?.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
+                        }))
+                    }));
+
+                    // Enrich replyTo with profile picture
+                    let replyToData = post.replyTo ? JSON.parse(post.replyTo) : null;
+                    if (replyToData) {
+                        replyToData.profilePicture = usersMap[replyToData.username?.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg';
+                    }
 
                 // Enrich post with profile picture
                 return {
@@ -88,6 +92,8 @@ if (req.method === 'GET') {
                         ? post.photo
                         : post.photo ? `data:image/jpeg;base64,${post.photo.toString('base64')}` : null,
                     profilePicture: usersMap[post.username.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
+                     tags: post.tags ? JSON.parse(post.tags) : [],
+                        replyTo: replyToData
                 };
             });
 
