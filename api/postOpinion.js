@@ -16,8 +16,7 @@ const setCorsHeaders = (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
-
-module.exports = async function handler(req, res) {
+  const handler = async (req, res) => {
  setCorsHeaders(req, res);
 
     if (req.method === 'OPTIONS') {
