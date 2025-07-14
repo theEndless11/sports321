@@ -1,15 +1,23 @@
 const { promisePool } = require('../utils/db');
 const { publishToAbly } = require('../utils/ably');
 
-// Set CORS headers
-const setCorsHeaders = (res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');  
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');  
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');  
+// Set CORS headers with specific origin
+const allowedOrigins = ['http://localhost:5173', 'https://latestnewsandaffairs.site'];
+
+const setCorsHeaders = (req, res) => {
+    const origin = req.headers.origin;
+
+    if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true'); // Optional: only if you're using cookies/sessions
 };
 
 module.exports = async function handler(req, res) {
-  setCorsHeaders(res); 
+  setCorsHeaders(req,res); 
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
