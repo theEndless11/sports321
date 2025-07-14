@@ -26,7 +26,7 @@ const setCorsHeaders = (req, res) => {
 
     // POST: Create new post
     if (req.method === 'POST') {
-        const { message, username, sessionId, photo, profilePic, tags } = req.body;
+        const { message, username, sessionId, photo, profilePic, tags, replyTo } = req.body;
 
         if (!username || !sessionId) {
             return res.status(400).json({ message: 'Username and sessionId are required' });
