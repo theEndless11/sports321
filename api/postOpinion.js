@@ -74,23 +74,22 @@ const setCorsHeaders = (req, res) => {
                     return res.status(400).json({ message: 'Replied-to post not found' });
                 }
             }
-
             // Insert new post into the posts table
-            const [result] = await promisePool.execute(
-                `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, tags,replyTo)
-                 VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
-                [
-                    message || '',
-                    username,
-                    sessionId,
-                    '[]',
-                    '[]',
-                    '[]',
-                    photoUrl,
-                    JSON.stringify(extractedTags)
-                ]
-            );
-
+const [result] = await promisePool.execute(
+  `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, tags, replyTo)
+   VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+  [
+    message || '',
+    username,
+    sessionId,
+    '[]', // likedBy
+    '[]', // dislikedBy
+    '[]', // comments
+    photoUrl,
+    JSON.stringify(extractedTags),
+    replyToData ? JSON.stringify(replyToData) : null
+  ]
+);
             const newPost = {
                 _id: result.insertId,
                 message: message || '',
