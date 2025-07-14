@@ -3,13 +3,13 @@ const { publishToAbly } = require('../utils/ably');
 
 // Set CORS headers
 const setCorsHeaders = (req, res) => {
-    const allowedOrigins = ['https://latestnewsandaffairs.site'];
+    const allowedOrigins = ['*'];
     const origin = req.headers.origin;
 
     if (allowedOrigins.includes(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
     } else {
-        res.setHeader('Access-Control-Allow-Origin', 'https://latestnewsandaffairs.site');
+        res.setHeader('Access-Control-Allow-Origin', '*');
     }
 
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
