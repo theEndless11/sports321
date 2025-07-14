@@ -26,7 +26,7 @@ const setCorsHeaders = (req, res) => {
 
     // POST: Create new post
     if (req.method === 'POST') {
-        const { message, username, sessionId, photo, userId, profilePic, tags } = req.body;
+        const { message, username, sessionId, photo, profilePic, tags } = req.body;
 
         if (!username || !sessionId) {
             return res.status(400).json({ message: 'Username and sessionId are required' });
@@ -57,13 +57,12 @@ const setCorsHeaders = (req, res) => {
 
             // Insert new post into the posts table
             const [result] = await promisePool.execute(
-                `INSERT INTO posts (message, timestamp, username, sessionId, userId, likes, dislikes, likedBy, dislikedBy, comments, photo, profilePicture, tags)
-                 VALUES (?, NOW(), ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, profilePicture, tags)
+                 VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
                 [
                     message || '',
                     username,
                     sessionId,
-                    userId || null,
                     '[]',
                     '[]',
                     '[]',
@@ -78,7 +77,6 @@ const setCorsHeaders = (req, res) => {
                 message: message || '',
                 timestamp: new Date(),
                 username,
-                userId: userId || null,
                 likes: 0,
                 dislikes: 0,
                 likedBy: [],
@@ -162,7 +160,6 @@ const setCorsHeaders = (req, res) => {
                 message: post.message,
                 timestamp: post.timestamp,
                 username: post.username,
-                userId: post.userId,
                 likes: updatedLikes,
                 dislikes: updatedDislikes,
                 comments: JSON.parse(post.comments),
@@ -183,8 +180,8 @@ const setCorsHeaders = (req, res) => {
             return res.status(500).json({ message: 'Error updating post', error });
         }
     }
+
     // Handle other methods
     return res.status(405).json({ message: 'Method Not Allowed' });
 };
-
 module.exports = handler;
