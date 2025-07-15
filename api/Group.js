@@ -1,39 +1,34 @@
 const { promisePool } = require('../utils/db');
-const { publishToAbly } = require('../utils/ably');
 
-// Set CORS headers with specific origin
 const allowedOrigins = [
-  'https://latestnewsandaffairs.site', 'http://localhost:5173'];
+  'https://latestnewsandaffairs.site',
+  'http://localhost:5173',
+];
 
 const setCorsHeaders = (req, res) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin'); // Ensures caching doesn't cause CORS mismatch
+    res.setHeader('Vary', 'Origin');
   }
-
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
- const handler = async (req, res) => {
+
+const handler = async (req, res) => {
+  setCorsHeaders(req, res);
+
   if (req.method === 'OPTIONS') {
-    setCorsHeaders(req, res); // ✅ CORS headers for preflight
     return res.status(200).end();
   }
 
-  setCorsHeaders(req, res); // 🟢 Still apply to regular requests
   try {
     if (req.method === 'POST') {
-      const body = JSON.parse(event.body);
-      const { name, creator } = body;
+      const { name, creator } = req.body; // Assuming body-parser middleware used
 
       if (!name || !creator) {
-        return {
-          statusCode: 400,
-          headers,
-          body: JSON.stringify({ error: 'Missing name or creator' }),
-        };
+        return res.status(400).json({ error: 'Missing name or creator' });
       }
 
       const [result] = await promisePool.query(
@@ -41,40 +36,26 @@ const setCorsHeaders = (req, res) => {
         [name, creator]
       );
 
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          id: result.insertId,
-          name,
-          creator,
-        }),
-      };
+      return res.status(200).json({
+        id: result.insertId,
+        name,
+        creator,
+      });
     }
 
     if (req.method === 'GET') {
       const [groups] = await promisePool.query('SELECT * FROM Groups');
-
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify(groups),
-      };
+      return res.status(200).json(groups);
     }
 
-    return {
-      statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: 'Method Not Allowed' }),
-    };
+    return res.status(405).json({ error: 'Method Not Allowed' });
   } catch (error) {
     console.error('Error:', error);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Internal server error' }),
-    };
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+module.exports = handler;
+
 
 
