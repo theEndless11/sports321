@@ -1,24 +1,49 @@
-// /api/groupHandler.js
 const { promisePool } = require('../utils/db'); // MySQL connection pool
+
+const allowedOrigins = [
+  'https://latestnewsandaffairs.site',
+  'http://localhost:5173',
+];
+
+const headers = {
+  'Content-Type': 'application/json',
+};
+
+const setCorsHeaders = (req, res) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin'); // Avoid caching issues
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+};
 
 exports.handler = async (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;
 
-  // Set CORS headers
-  const headers = {
-    'Access-Control-Allow-Origin': event.headers.origin || '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  const req = {
+    method: event.httpMethod,
+    headers: event.headers || {},
   };
 
-  // Handle CORS preflight request
-  if (event.httpMethod === 'OPTIONS') {
+  const res = {
+    setHeader: (name, value) => {
+      headers[name] = value;
+    },
+  };
+
+  if (req.method === 'OPTIONS') {
+    setCorsHeaders(req, res);
     return {
-      statusCode: 204,
+      statusCode: 200,
       headers,
       body: '',
     };
   }
+
+  setCorsHeaders(req, res);
 
   try {
     const { path, httpMethod } = event;
@@ -27,7 +52,6 @@ exports.handler = async (event, context) => {
       const body = JSON.parse(event.body);
       const { name, creator } = body;
 
-      // Check for valid input
       if (!name || !creator) {
         return {
           statusCode: 400,
@@ -36,17 +60,7 @@ exports.handler = async (event, context) => {
         };
       }
 
-      // Verify user exists
-      const [userRows] = await promisePool.query('SELECT username FROM Users WHERE username = ?', [creator]);
-      if (userRows.length === 0) {
-        return {
-          statusCode: 400,
-          headers,
-          body: JSON.stringify({ error: 'User does not exist' }),
-        };
-      }
-
-      // Insert group
+      // Directly insert into Groups without user verification
       const [result] = await promisePool.query(
         'INSERT INTO Groups (name, creator) VALUES (?, ?)',
         [name, creator]
@@ -67,6 +81,7 @@ exports.handler = async (event, context) => {
 
     if (path === '/getGroups' && httpMethod === 'GET') {
       const [groups] = await promisePool.query('SELECT * FROM Groups');
+
       return {
         statusCode: 200,
         headers,
@@ -81,6 +96,7 @@ exports.handler = async (event, context) => {
     };
   } catch (error) {
     console.error('Error:', error);
+
     return {
       statusCode: 500,
       headers,
@@ -88,3 +104,4 @@ exports.handler = async (event, context) => {
     };
   }
 };
+
