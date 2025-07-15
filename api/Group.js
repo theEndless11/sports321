@@ -1,8 +1,9 @@
-const { promisePool } = require('../utils/db'); // MySQL connection pool
+const { promisePool } = require('../utils/db');
 
 const allowedOrigins = [
   'https://latestnewsandaffairs.site',
   'http://localhost:5173',
+  'https://sports321.vercel.app',
 ];
 
 const headers = {
@@ -13,7 +14,7 @@ const setCorsHeaders = (req, res) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin'); // Avoid caching issues
+    res.setHeader('Vary', 'Origin');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -46,9 +47,7 @@ exports.handler = async (event, context) => {
   setCorsHeaders(req, res);
 
   try {
-    const { path, httpMethod } = event;
-
-    if (path === '/createGroup' && httpMethod === 'POST') {
+    if (req.method === 'POST') {
       const body = JSON.parse(event.body);
       const { name, creator } = body;
 
@@ -60,26 +59,23 @@ exports.handler = async (event, context) => {
         };
       }
 
-      // Directly insert into Groups without user verification
       const [result] = await promisePool.query(
         'INSERT INTO Groups (name, creator) VALUES (?, ?)',
         [name, creator]
       );
 
-      const group = {
-        id: result.insertId,
-        name,
-        creator,
-      };
-
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify(group),
+        body: JSON.stringify({
+          id: result.insertId,
+          name,
+          creator,
+        }),
       };
     }
 
-    if (path === '/getGroups' && httpMethod === 'GET') {
+    if (req.method === 'GET') {
       const [groups] = await promisePool.query('SELECT * FROM Groups');
 
       return {
@@ -90,13 +86,12 @@ exports.handler = async (event, context) => {
     }
 
     return {
-      statusCode: 404,
+      statusCode: 405,
       headers,
-      body: JSON.stringify({ error: 'Route not found' }),
+      body: JSON.stringify({ error: 'Method Not Allowed' }),
     };
   } catch (error) {
     console.error('Error:', error);
-
     return {
       statusCode: 500,
       headers,
@@ -104,4 +99,5 @@ exports.handler = async (event, context) => {
     };
   }
 };
+
 
