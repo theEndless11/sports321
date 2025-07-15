@@ -1,51 +1,28 @@
 const { promisePool } = require('../utils/db');
+const { publishToAbly } = require('../utils/ably');
 
+// Set CORS headers with specific origin
 const allowedOrigins = [
-  'https://latestnewsandaffairs.site',
-  'http://localhost:5173',
-  'https://sports321.vercel.app',
-];
-
-const headers = {
-  'Content-Type': 'application/json',
-};
+  'https://latestnewsandaffairs.site', 'http://localhost:5173'];
 
 const setCorsHeaders = (req, res) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin');
+    res.setHeader('Vary', 'Origin'); // Ensures caching doesn't cause CORS mismatch
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
-
-exports.handler = async (event, context) => {
-  context.callbackWaitsForEmptyEventLoop = false;
-
-  const req = {
-    method: event.httpMethod,
-    headers: event.headers || {},
-  };
-
-  const res = {
-    setHeader: (name, value) => {
-      headers[name] = value;
-    },
-  };
-
+ const handler = async (req, res) => {
   if (req.method === 'OPTIONS') {
-    setCorsHeaders(req, res);
-    return {
-      statusCode: 200,
-      headers,
-      body: '',
-    };
+    setCorsHeaders(req, res); // ✅ CORS headers for preflight
+    return res.status(200).end();
   }
 
-  setCorsHeaders(req, res);
-
+  setCorsHeaders(req, res); // 🟢 Still apply to regular requests
   try {
     if (req.method === 'POST') {
       const body = JSON.parse(event.body);
