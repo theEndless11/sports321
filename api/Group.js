@@ -35,9 +35,6 @@ const handler = async (req, res) => {
     'INSERT INTO Groups (name, creator, image) VALUES (?, ?, ?)',
     [name, creator, image || null]
   )
-
-  return res.status(200).json({ message: 'Group created', groupId: result.insertId })
-}
     }
 
     if (req.method === 'GET') {
