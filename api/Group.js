@@ -25,22 +25,19 @@ const handler = async (req, res) => {
 
   try {
     if (req.method === 'POST') {
-      const { name, creator } = req.body; // Assuming body-parser middleware used
+  const { name, creator, image } = req.body
 
-      if (!name || !creator) {
-        return res.status(400).json({ error: 'Missing name or creator' });
-      }
+  if (!name || !creator) {
+    return res.status(400).json({ error: 'Missing name or creator' })
+  }
 
-      const [result] = await promisePool.query(
-        'INSERT INTO Groups (name, creator) VALUES (?, ?)',
-        [name, creator]
-      );
+  const [result] = await promisePool.query(
+    'INSERT INTO Groups (name, creator, image) VALUES (?, ?, ?)',
+    [name, creator, image || null]
+  )
 
-      return res.status(200).json({
-        id: result.insertId,
-        name,
-        creator,
-      });
+  return res.status(200).json({ message: 'Group created', groupId: result.insertId })
+}
     }
 
     if (req.method === 'GET') {
