@@ -40,7 +40,7 @@ const handler = async (req, res) => {
     }
 
     // Match /api/notifications/:username
-    if (method === 'GET' && /^\/api\/notifications\/[^/]+$/.test(url)) {
+    if (method === 'GET' && /^\/api\/notification\/[^/]+$/.test(url)) {
       const username = url.split('/').pop();
       if (!username) return res.status(400).json({ error: 'Username is required' });
 
@@ -57,7 +57,7 @@ const handler = async (req, res) => {
     }
 
     // Match /api/notifications/cleanup
-    if (method === 'DELETE' && url === '/api/notifications/cleanup') {
+    if (method === 'DELETE' && url === '/api/notification/cleanup') {
       await promisePool.execute(
         'DELETE FROM notifications WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)'
       );
