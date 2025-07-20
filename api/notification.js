@@ -11,7 +11,7 @@ const setCorsHeaders = (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
@@ -23,8 +23,23 @@ const handler = async (req, res) => {
     return res.status(200).end();
   }
 
+  const { method, url } = req;
+
   try {
-    // Route: GET /api/notifications/:username
+    // Match /api/notifications/:username/count
+    if (method === 'GET' && /^\/api\/notifications\/[^/]+\/count$/.test(url)) {
+      const username = url.split('/')[3];
+      if (!username) return res.status(400).json({ error: 'Username is required' });
+
+      const [result] = await promisePool.execute(
+        'SELECT COUNT(*) as count FROM notifications WHERE recipient = ?',
+        [username]
+      );
+
+      return res.status(200).json({ count: result[0].count });
+    }
+
+    // Match /api/notifications/:username
     if (method === 'GET' && /^\/api\/notifications\/[^/]+$/.test(url)) {
       const username = url.split('/').pop();
       if (!username) return res.status(400).json({ error: 'Username is required' });
@@ -41,20 +56,7 @@ const handler = async (req, res) => {
       return res.status(200).json(notifications);
     }
 
-    // Route: GET /api/notifications/:username/count
-    if (method === 'GET' && /^\/api\/notifications\/[^/]+\/count$/.test(url)) {
-      const username = url.split('/')[3];
-      if (!username) return res.status(400).json({ error: 'Username is required' });
-
-      const [result] = await promisePool.execute(
-        'SELECT COUNT(*) as count FROM notifications WHERE recipient = ?',
-        [username]
-      );
-
-      return res.status(200).json({ count: result[0].count });
-    }
-
-    // Route: DELETE /api/notifications/cleanup
+    // Match /api/notifications/cleanup
     if (method === 'DELETE' && url === '/api/notifications/cleanup') {
       await promisePool.execute(
         'DELETE FROM notifications WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)'
@@ -62,7 +64,7 @@ const handler = async (req, res) => {
       return res.status(200).json({ success: true, message: 'Old notifications cleaned up' });
     }
 
-    // If no matching route
+    // Not found
     return res.status(404).json({ error: 'Not found' });
 
   } catch (error) {
@@ -72,3 +74,4 @@ const handler = async (req, res) => {
 };
 
 module.exports = handler;
+
