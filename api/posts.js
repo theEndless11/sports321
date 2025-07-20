@@ -13,7 +13,6 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
-update here as well for get
 
 if (req.method === 'GET') {
     const { username_like, start_timestamp, end_timestamp, username, page = 1, limit = 5, sort } = req.query;
