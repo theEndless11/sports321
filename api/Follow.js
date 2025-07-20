@@ -1,4 +1,3 @@
-// pages/api/follow.js (or wherever your API handler resides)
 const { promisePool } = require('../utils/db');
 const cors = require('cors');
 
@@ -17,50 +16,18 @@ const corsOptions = {
   credentials: true,
 };
 
-// === Helper: Notification creation ===
-async function createNotification(recipient, sender, type, message) {
-  try {
-    await promisePool.execute(
-      'INSERT INTO notifications (recipient, sender, type, message) VALUES (?, ?, ?, ?)',
-      [recipient, sender, type, message]
-    );
-  } catch (error) {
-    console.error('Error creating notification:', error);
-  }
-}
-
-// === Helper: Follower/friend counts ===
-async function updateFollowerCount(username, increment) {
-  try {
-    await promisePool.execute(
-      'UPDATE users SET followers_count = GREATEST(0, COALESCE(followers_count,0) + ?) WHERE username = ?',
-      [increment, username]
-    );
-  } catch (e) {
-    console.error('Error updating follower count:', e);
-  }
-}
-
-async function updateFriendsCount(username, increment) {
-  try {
-    await promisePool.execute(
-      'UPDATE users SET friends_count = GREATEST(0, COALESCE(friends_count,0) + ?) WHERE username = ?',
-      [increment, username]
-    );
-  } catch (e) {
-    console.error('Error updating friends count:', e);
-  }
-}
-
-// === Core API handler ===
 module.exports = async function handler(req, res) {
   await new Promise(resolve => cors(corsOptions)(req, res, resolve));
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { action, currentUser, targetUser, follower, following, requester, recipient } = req.body;
+  const { action, currentUser, targetUser } = req.body;
 
   try {
+    if (!action && currentUser && targetUser) {
+      return await getRelationshipStatus(req, res);
+    }
+
     switch (action) {
       case 'follow':
         return await followUser(req, res);
@@ -73,53 +40,54 @@ module.exports = async function handler(req, res) {
       case 'relationship_status':
         return await getRelationshipStatus(req, res);
       default:
-        if (currentUser && targetUser) {
-          return await getRelationshipStatus(req, res);
-        }
         return res.status(400).json({ error: 'Invalid action' });
     }
-  } catch (err) {
-    console.error('❌ Error in Follow API:', err);
+  } catch (error) {
+    console.error('❌ Error in Follow API:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
+// === Notification Helper ===
+async function createNotification(recipient, sender, type, message) {
+  try {
+    await promisePool.execute(
+      'INSERT INTO notifications (recipient, sender, type, message) VALUES (?, ?, ?, ?)',
+      [recipient, sender, type, message]
+    );
+  } catch (error) {
+    console.error('Error creating notification:', error);
+  }
+}
+
 // === Follow Logic ===
 async function followUser(req, res) {
   const { follower, following } = req.body;
-  if (!follower || !following || follower === following) {
+  if (!follower || !following || follower === following)
     return res.status(400).json({ error: 'Invalid usernames' });
-  }
 
   const [rows] = await promisePool.execute(
-    'SELECT 1 FROM follows WHERE follower = ? AND following = ?',
-    [follower, following]
+    'SELECT relationship_status FROM follows WHERE (follower = ? AND following = ?) OR (follower = ? AND following = ?)',
+    [follower, following, following, follower]
   );
-  if (rows.length) {
-    return res.status(409).json({ error: 'Already following' });
-  }
+
+  if (rows.length)
+    return res.status(409).json({ error: 'Relationship already exists' });
 
   await promisePool.execute(
     'INSERT INTO follows (follower, following, relationship_status) VALUES (?, ?, ?)',
     [follower, following, RELATIONSHIP.FOLLOWING]
   );
-  await updateFollowerCount(following, 1);
 
-  await createNotification(
-    following,
-    follower,
-    'follow',
-    `${follower} started following you`
-  );
+  await updateFollowerCount(following, 1);
 
   return res.status(201).json({ success: true, message: 'Followed successfully' });
 }
 
 async function unfollowUser(req, res) {
   const { follower, following } = req.body;
-  if (!follower || !following) {
+  if (!follower || !following)
     return res.status(400).json({ error: 'Invalid usernames' });
-  }
 
   const [result] = await promisePool.execute(
     'DELETE FROM follows WHERE follower = ? AND following = ? AND relationship_status = ?',
@@ -133,33 +101,38 @@ async function unfollowUser(req, res) {
   return res.status(200).json({ success: true, message: 'Unfollowed successfully' });
 }
 
-// === Friend Logic ===
+// === Friend Logic with Notifications ===
 async function addFriend(req, res) {
   const { requester, recipient } = req.body;
-  if (!requester || !recipient || requester === recipient) {
+  if (!requester || !recipient || requester === recipient)
     return res.status(400).json({ error: 'Invalid usernames' });
-  }
 
   const [reverseRows] = await promisePool.execute(
     'SELECT relationship_status FROM follows WHERE follower = ? AND following = ?',
     [recipient, requester]
   );
 
+  // Accept request if it exists
   if (reverseRows.length && reverseRows[0].relationship_status === RELATIONSHIP.PENDING) {
-    // Accept pending request
     await promisePool.execute(
       'UPDATE follows SET relationship_status = ? WHERE follower = ? AND following = ?',
       [RELATIONSHIP.ACCEPTED, recipient, requester]
     );
 
     const [alreadyExists] = await promisePool.execute(
-      'SELECT 1 FROM follows WHERE follower = ? AND following = ?',
+      'SELECT * FROM follows WHERE follower = ? AND following = ?',
       [requester, recipient]
     );
+
     if (!alreadyExists.length) {
       await promisePool.execute(
         'INSERT INTO follows (follower, following, relationship_status) VALUES (?, ?, ?)',
         [requester, recipient, RELATIONSHIP.ACCEPTED]
+      );
+    } else {
+      await promisePool.execute(
+        'UPDATE follows SET relationship_status = ? WHERE follower = ? AND following = ?',
+        [RELATIONSHIP.ACCEPTED, requester, recipient]
       );
     }
 
@@ -172,6 +145,7 @@ async function addFriend(req, res) {
       'friend_accepted',
       `${requester} accepted your friend request`
     );
+
     await promisePool.execute(
       'DELETE FROM notifications WHERE recipient = ? AND sender = ? AND type = ?',
       [requester, recipient, 'friend_request']
@@ -180,19 +154,19 @@ async function addFriend(req, res) {
     return res.status(200).json({ success: true, message: 'Friend request accepted' });
   }
 
-  // Send new friend request
   const [existing] = await promisePool.execute(
-    'SELECT 1 FROM follows WHERE follower = ? AND following = ?',
+    'SELECT * FROM follows WHERE follower = ? AND following = ?',
     [requester, recipient]
   );
-  if (existing.length) {
-    return res.status(409).json({ error: 'Friend request already exists' });
-  }
+
+  if (existing.length)
+    return res.status(409).json({ error: 'Friend request already sent or exists' });
 
   await promisePool.execute(
     'INSERT INTO follows (follower, following, relationship_status) VALUES (?, ?, ?)',
     [requester, recipient, RELATIONSHIP.PENDING]
   );
+
   await createNotification(
     recipient,
     requester,
@@ -205,14 +179,14 @@ async function addFriend(req, res) {
 
 async function removeFriend(req, res) {
   const { requester, recipient } = req.body;
-  if (!requester || !recipient) {
+  if (!requester || !recipient)
     return res.status(400).json({ error: 'Invalid usernames' });
-  }
 
   const [friendshipCheck] = await promisePool.execute(
     'SELECT relationship_status FROM follows WHERE ((follower = ? AND following = ?) OR (follower = ? AND following = ?)) AND relationship_status = ?',
     [requester, recipient, recipient, requester, RELATIONSHIP.ACCEPTED]
   );
+
   const wereFriends = friendshipCheck.length > 0;
 
   await promisePool.execute(
@@ -228,17 +202,17 @@ async function removeFriend(req, res) {
   if (wereFriends) {
     await updateFriendsCount(requester, -1);
     await updateFriendsCount(recipient, -1);
+    // Optional: create "friend removed" notification
   }
 
-  return res.status(200).json({ success: true, message: 'Friendship removed or cancelled' });
+  return res.status(200).json({ success: true, message: 'Friendship removed or request cancelled' });
 }
 
-// === Relationship status ===
+// === Relationship Status Check ===
 async function getRelationshipStatus(req, res) {
   const { currentUser, targetUser } = req.body;
-  if (!currentUser || !targetUser) {
+  if (!currentUser || !targetUser)
     return res.status(400).json({ error: 'Invalid usernames' });
-  }
 
   const [rows] = await promisePool.execute(
     'SELECT relationship_status, follower, following FROM follows WHERE (follower = ? AND following = ?) OR (follower = ? AND following = ?)',
@@ -267,11 +241,12 @@ async function getRelationshipStatus(req, res) {
   return res.status(200).json({ isFollowing, friendshipStatus });
 }
 
-// === Notifications ===
+// === Notification Utilities ===
 async function getUserNotifications(req, res) {
   const { username } = req.params;
+
   if (!username) {
-    return res.status(400).json({ error: 'Username required' });
+    return res.status(400).json({ error: 'Username is required' });
   }
 
   try {
@@ -279,9 +254,9 @@ async function getUserNotifications(req, res) {
       'SELECT * FROM notifications WHERE recipient = ? ORDER BY created_at DESC LIMIT 50',
       [username]
     );
-    return res.status(200).json({ notifications });
-  } catch (err) {
-    console.error('Error fetching notifications:', err);
+    return res.status(200).json(notifications);
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
     return res.status(500).json({ error: 'Failed to fetch notifications' });
   }
 }
@@ -292,10 +267,38 @@ async function cleanupOldNotifications(req, res) {
       'DELETE FROM notifications WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)'
     );
     return res.status(200).json({ success: true, message: 'Old notifications cleaned up' });
-  } catch (err) {
-    console.error('Error cleaning up notifications:', err);
+  } catch (error) {
+    console.error('Error cleaning notifications:', error);
     return res.status(500).json({ error: 'Failed to cleanup notifications' });
   }
 }
 
-module.exports = handler;
+// === Helpers ===
+async function updateFollowerCount(username, increment) {
+  try {
+    await promisePool.execute(
+      'UPDATE users SET followers_count = GREATEST(0, COALESCE(followers_count, 0) + ?) WHERE username = ?',
+      [increment, username]
+    );
+  } catch (error) {
+    console.error('Error updating follower count:', error);
+  }
+}
+
+async function updateFriendsCount(username, increment) {
+  try {
+    await promisePool.execute(
+      'UPDATE users SET friends_count = GREATEST(0, COALESCE(friends_count, 0) + ?) WHERE username = ?',
+      [increment, username]
+    );
+  } catch (error) {
+    console.error('Error updating friends count:', error);
+  }
+}
+
+// === Exports ===
+module.exports.addFriend = addFriend;
+module.exports.removeFriend = removeFriend;
+module.exports.getUserNotifications = getUserNotifications;
+module.exports.cleanupOldNotifications = cleanupOldNotifications;
+
