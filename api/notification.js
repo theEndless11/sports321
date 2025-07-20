@@ -30,29 +30,21 @@ const handler = async (req, res) => {
       return res.status(400).json({ error: 'Username is required' });
     }
 
-    // GET /api/notification?username=john — get latest notifications
+    // 🔹 GET notifications
     if (method === 'GET' && action !== 'count') {
-  const { type } = req.query;
-  let query = `
-    SELECT id, recipient, sender, type, message, created_at
-    FROM notifications
-    WHERE recipient = ?
-  `;
-  const params = [username];
+      const [notifications] = await promisePool.execute(
+        `SELECT id, recipient, sender, type, message, created_at
+         FROM notifications
+         WHERE recipient = ?
+         ORDER BY created_at DESC
+         LIMIT 50`,
+        [username]
+      );
+      console.log(`Fetched ${notifications.length} notifications for ${username}`);
+      return res.status(200).json(notifications);
+    }
 
-  if (type) {
-    query += ` AND type = ?`;
-    params.push(type);
-  }
-
-  query += ` ORDER BY created_at DESC LIMIT 50`;
-
-  const [notifications] = await promisePool.execute(query, params);
-  return res.status(200).json(notifications);
-}
-
-
-    // GET /api/notification?username=john&action=count — get count
+    // 🔸 GET notification count
     if (method === 'GET' && action === 'count') {
       const [result] = await promisePool.execute(
         'SELECT COUNT(*) AS count FROM notifications WHERE recipient = ?',
@@ -61,7 +53,7 @@ const handler = async (req, res) => {
       return res.status(200).json({ count: result[0].count });
     }
 
-    // DELETE /api/notification?action=cleanup — cleanup old notifications
+    // 🧹 DELETE old notifications
     if (method === 'DELETE' && action === 'cleanup') {
       await promisePool.execute(
         'DELETE FROM notifications WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)'
@@ -77,4 +69,5 @@ const handler = async (req, res) => {
 };
 
 module.exports = handler;
+
 
