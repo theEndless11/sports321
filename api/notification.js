@@ -1,21 +1,27 @@
-const cors = require('cors');
 const { promisePool } = require('../utils/db');
 
-// CORS Configuration
-const corsOptions = {
-  origin: ['*', 'http://localhost:5173'],
-  methods: ['GET', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+const allowedOrigins = [
+  'https://latestnewsandaffairs.site',
+  'http://localhost:5173',
+];
+
+const setCorsHeaders = (req, res) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
 
-// Main handler
-module.exports = async function handler(req, res) {
-  await new Promise(resolve => cors(corsOptions)(req, res, resolve));
-  const { method, url } = req;
+const handler = async (req, res) => {
+  setCorsHeaders(req, res);
 
-  // Handle preflight
-  if (method === 'OPTIONS') return res.status(200).end();
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
   try {
     // Route: GET /api/notifications/:username
@@ -64,3 +70,5 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+module.exports = handler;
