@@ -3,6 +3,7 @@ const { promisePool } = require('../utils/db');
 const allowedOrigins = [
   'https://latestnewsandaffairs.site',
   'http://localhost:5173',
+  'https://sports321.vercel.app', // Add your actual frontend domain
 ];
 
 const setCorsHeaders = (req, res) => {
@@ -19,27 +20,25 @@ const setCorsHeaders = (req, res) => {
 const handler = async (req, res) => {
   setCorsHeaders(req, res);
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { method, url } = req;
 
   try {
-    // Match /api/notifications/:username/count
-    if (method === 'GET' && /^\/api\/notifications\/[^/]+\/count$/.test(url)) {
+    // GET /api/notification/:username/count
+    if (method === 'GET' && /^\/api\/notification\/[^/]+\/count$/.test(url)) {
       const username = url.split('/')[3];
       if (!username) return res.status(400).json({ error: 'Username is required' });
 
       const [result] = await promisePool.execute(
-        'SELECT COUNT(*) as count FROM notifications WHERE recipient = ?',
+        'SELECT COUNT(*) AS count FROM notifications WHERE recipient = ?',
         [username]
       );
 
       return res.status(200).json({ count: result[0].count });
     }
 
-    // Match /api/notifications/:username
+    // GET /api/notification/:username
     if (method === 'GET' && /^\/api\/notification\/[^/]+$/.test(url)) {
       const username = url.split('/').pop();
       if (!username) return res.status(400).json({ error: 'Username is required' });
@@ -56,11 +55,12 @@ const handler = async (req, res) => {
       return res.status(200).json(notifications);
     }
 
-    // Match /api/notifications/cleanup
+    // DELETE /api/notification/cleanup
     if (method === 'DELETE' && url === '/api/notification/cleanup') {
       await promisePool.execute(
         'DELETE FROM notifications WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)'
       );
+
       return res.status(200).json({ success: true, message: 'Old notifications cleaned up' });
     }
 
@@ -74,4 +74,3 @@ const handler = async (req, res) => {
 };
 
 module.exports = handler;
-
