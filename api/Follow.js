@@ -298,15 +298,4 @@ async function cleanupOldNotifications(req, res) {
   }
 }
 
-// === Module exports ===
-module.exports = {
-  handler,
-  followUser,
-  unfollowUser,
-  addFriend,
-  removeFriend,
-  getRelationshipStatus,
-  getUserNotifications,
-  cleanupOldNotifications,
-};
-
+module.exports = handler;
