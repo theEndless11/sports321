@@ -32,16 +32,25 @@ const handler = async (req, res) => {
 
     // GET /api/notification?username=john — get latest notifications
     if (method === 'GET' && action !== 'count') {
-      const [notifications] = await promisePool.execute(
-        `SELECT id, recipient, sender, type, message, created_at
-         FROM notifications
-         WHERE recipient = ?
-         ORDER BY created_at DESC
-         LIMIT 50`,
-        [username]
-      );
-      return res.status(200).json(notifications);
-    }
+  const { type } = req.query;
+  let query = `
+    SELECT id, recipient, sender, type, message, created_at
+    FROM notifications
+    WHERE recipient = ?
+  `;
+  const params = [username];
+
+  if (type) {
+    query += ` AND type = ?`;
+    params.push(type);
+  }
+
+  query += ` ORDER BY created_at DESC LIMIT 50`;
+
+  const [notifications] = await promisePool.execute(query, params);
+  return res.status(200).json(notifications);
+}
+
 
     // GET /api/notification?username=john&action=count — get count
     if (method === 'GET' && action === 'count') {
