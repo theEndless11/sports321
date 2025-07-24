@@ -445,6 +445,4 @@ async function getRelationshipStatus(req, res) {
 // === Export functions ===
 module.exports.addFriend = addFriend;
 module.exports.removeFriend = removeFriend;
-module.exports.getUserNotifications = getUserNotifications;
-module.exports.cleanupOldNotifications = cleanupOldNotifications;
 
