@@ -59,7 +59,7 @@ async function createNotification(recipient, sender, type, message, connection =
     
     // Prevent duplicate notifications
     const [existing] = await db.execute(
-      'SELECT id FROM notifications WHERE recipient = ? AND sender = ? AND type = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 MINUTE)',
+      'SELECT id FROM notifications WHERE recipient = ? AND sender = ? AND type = ? AND updated_at > DATE_SUB(NOW(), INTERVAL 1 MINUTE)',
       [recipient, sender, type]
     );
     
@@ -128,7 +128,7 @@ async function addFriend(req, res) {
       if (!existingReverse.length) {
         // Create the reverse relationship
         await connection.execute(
-          'INSERT INTO follows (follower, following, relationship_status, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
+          'INSERT INTO follows (follower, following, relationship_status, updated_at) VALUES (?, ?, ?, NOW())',
           [cleanRecipient, cleanRequester, RELATIONSHIP.ACCEPTED]
         );
       } else {
@@ -210,7 +210,7 @@ async function addFriend(req, res) {
     console.log(`📤 Sending new friend request from ${cleanRequester} to ${cleanRecipient}`);
     
     await connection.execute(
-      'INSERT INTO follows (follower, following, relationship_status, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
+      'INSERT INTO follows (follower, following, relationship_status, updated_at) VALUES (?, ?, ?, NOW())',
       [cleanRequester, cleanRecipient, RELATIONSHIP.PENDING]
     );
 
