@@ -103,39 +103,39 @@ async function addFriend(req, res) {
   try {
     await connection.beginTransaction();
     
-    // Check if there's a pending request from recipient to requester (they want to accept)
-    const [reverseRows] = await connection.execute(
+    // Check if there's a pending request TO the recipient (they want to accept)
+    const [pendingRows] = await connection.execute(
       'SELECT relationship_status FROM follows WHERE follower = ? AND following = ? FOR UPDATE',
-      [cleanRecipient, cleanRequester]
+      [cleanRequester, cleanRecipient]
     );
 
     // ACCEPTING A FRIEND REQUEST
-    if (reverseRows.length && reverseRows[0].relationship_status === RELATIONSHIP.PENDING) {
-      console.log(`✅ Accepting friend request from ${cleanRecipient} to ${cleanRequester}`);
+    if (pendingRows.length && pendingRows[0].relationship_status === RELATIONSHIP.PENDING) {
+      console.log(`✅ Accepting friend request from ${cleanRequester} to ${cleanRecipient}`);
       
       // Update the original request to accepted
       await connection.execute(
         'UPDATE follows SET relationship_status = ?, updated_at = NOW() WHERE follower = ? AND following = ?',
-        [RELATIONSHIP.ACCEPTED, cleanRecipient, cleanRequester]
+        [RELATIONSHIP.ACCEPTED, cleanRequester, cleanRecipient]
       );
 
       // Check if reverse relationship exists
       const [existingReverse] = await connection.execute(
         'SELECT relationship_status FROM follows WHERE follower = ? AND following = ? FOR UPDATE',
-        [cleanRequester, cleanRecipient]
+        [cleanRecipient, cleanRequester]
       );
 
       if (!existingReverse.length) {
         // Create the reverse relationship
         await connection.execute(
           'INSERT INTO follows (follower, following, relationship_status, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
-          [cleanRequester, cleanRecipient, RELATIONSHIP.ACCEPTED]
+          [cleanRecipient, cleanRequester, RELATIONSHIP.ACCEPTED]
         );
       } else {
         // Update existing reverse relationship
         await connection.execute(
           'UPDATE follows SET relationship_status = ?, updated_at = NOW() WHERE follower = ? AND following = ?',
-          [RELATIONSHIP.ACCEPTED, cleanRequester, cleanRecipient]
+          [RELATIONSHIP.ACCEPTED, cleanRecipient, cleanRequester]
         );
       }
 
@@ -145,17 +145,17 @@ async function addFriend(req, res) {
 
       // Create acceptance notification
       await createNotification(
-        cleanRecipient,
-        cleanRequester,
+        cleanRequester, // Notify the original requester
+        cleanRecipient, // That the recipient accepted
         'friend_accepted',
-        `${cleanRequester} accepted your friend request`,
+        `${cleanRecipient} accepted your friend request`,
         connection
       );
 
       // Remove the original friend request notification
       await connection.execute(
         'DELETE FROM notifications WHERE recipient = ? AND sender = ? AND type = ?',
-        [cleanRequester, cleanRecipient, 'friend_request']
+        [cleanRecipient, cleanRequester, 'friend_request']
       );
 
       await connection.commit();
@@ -445,4 +445,3 @@ async function getRelationshipStatus(req, res) {
 // === Export functions ===
 module.exports.addFriend = addFriend;
 module.exports.removeFriend = removeFriend;
-
