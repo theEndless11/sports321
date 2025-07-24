@@ -101,35 +101,44 @@ async function unfollowUser(req, res) {
   return res.status(200).json({ success: true, message: 'Unfollowed successfully' });
 }
 
-// === Friend Logic with Notifications ===
+// === Fixed Friend Logic ===
 async function addFriend(req, res) {
   const { requester, recipient } = req.body;
   if (!requester || !recipient || requester === recipient)
     return res.status(400).json({ error: 'Invalid usernames' });
 
+  console.log(`🔍 Friend request: ${requester} -> ${recipient}`);
+
+  // Check if there's a pending request from recipient to requester (they want to accept)
   const [reverseRows] = await promisePool.execute(
     'SELECT relationship_status FROM follows WHERE follower = ? AND following = ?',
     [recipient, requester]
   );
 
-  // Accept request if it exists
+  // ACCEPTING A FRIEND REQUEST
   if (reverseRows.length && reverseRows[0].relationship_status === RELATIONSHIP.PENDING) {
+    console.log(`✅ Accepting friend request from ${recipient} to ${requester}`);
+    
+    // Update the original request to accepted
     await promisePool.execute(
       'UPDATE follows SET relationship_status = ? WHERE follower = ? AND following = ?',
       [RELATIONSHIP.ACCEPTED, recipient, requester]
     );
 
-    const [alreadyExists] = await promisePool.execute(
+    // Check if reverse relationship exists
+    const [existingReverse] = await promisePool.execute(
       'SELECT * FROM follows WHERE follower = ? AND following = ?',
       [requester, recipient]
     );
 
-    if (!alreadyExists.length) {
+    if (!existingReverse.length) {
+      // Create the reverse relationship
       await promisePool.execute(
         'INSERT INTO follows (follower, following, relationship_status) VALUES (?, ?, ?)',
         [requester, recipient, RELATIONSHIP.ACCEPTED]
       );
     } else {
+      // Update existing reverse relationship
       await promisePool.execute(
         'UPDATE follows SET relationship_status = ? WHERE follower = ? AND following = ?',
         [RELATIONSHIP.ACCEPTED, requester, recipient]
@@ -146,6 +155,7 @@ async function addFriend(req, res) {
       `${requester} accepted your friend request`
     );
 
+    // Remove the original friend request notification
     await promisePool.execute(
       'DELETE FROM notifications WHERE recipient = ? AND sender = ? AND type = ?',
       [requester, recipient, 'friend_request']
@@ -154,14 +164,34 @@ async function addFriend(req, res) {
     return res.status(200).json({ success: true, message: 'Friend request accepted' });
   }
 
-  const [existing] = await promisePool.execute(
-    'SELECT * FROM follows WHERE follower = ? AND following = ?',
-    [requester, recipient]
+  // SENDING A NEW FRIEND REQUEST
+  // Check if request already exists in either direction
+  const [existingRequest] = await promisePool.execute(
+    'SELECT relationship_status, follower, following FROM follows WHERE (follower = ? AND following = ?) OR (follower = ? AND following = ?)',
+    [requester, recipient, recipient, requester]
   );
 
-  if (existing.length)
-    return res.status(409).json({ error: 'Friend request already sent or exists' });
+  // Check for existing relationships
+  for (const row of existingRequest) {
+    if (row.relationship_status === RELATIONSHIP.ACCEPTED) {
+      return res.status(409).json({ error: 'Users are already friends' });
+    }
+    if (row.relationship_status === RELATIONSHIP.PENDING) {
+      if (row.follower === requester && row.following === recipient) {
+        return res.status(409).json({ error: 'Friend request already sent' });
+      }
+      // If there's a pending request from recipient to requester, this should be handled above
+    }
+    if (row.relationship_status === RELATIONSHIP.FOLLOWING) {
+      if (row.follower === requester && row.following === recipient) {
+        return res.status(409).json({ error: 'You are already following this user' });
+      }
+    }
+  }
 
+  // Send new friend request
+  console.log(`📤 Sending new friend request from ${requester} to ${recipient}`);
+  
   await promisePool.execute(
     'INSERT INTO follows (follower, following, relationship_status) VALUES (?, ?, ?)',
     [requester, recipient, RELATIONSHIP.PENDING]
@@ -182,6 +212,9 @@ async function removeFriend(req, res) {
   if (!requester || !recipient)
     return res.status(400).json({ error: 'Invalid usernames' });
 
+  console.log(`🗑️ Removing friendship/request: ${requester} <-> ${recipient}`);
+
+  // Check if they were friends
   const [friendshipCheck] = await promisePool.execute(
     'SELECT relationship_status FROM follows WHERE ((follower = ? AND following = ?) OR (follower = ? AND following = ?)) AND relationship_status = ?',
     [requester, recipient, recipient, requester, RELATIONSHIP.ACCEPTED]
@@ -189,20 +222,25 @@ async function removeFriend(req, res) {
 
   const wereFriends = friendshipCheck.length > 0;
 
-  await promisePool.execute(
+  // Remove all relationships between the users
+  const [result] = await promisePool.execute(
     'DELETE FROM follows WHERE (follower = ? AND following = ?) OR (follower = ? AND following = ?)',
     [requester, recipient, recipient, requester]
   );
 
+  console.log(`🗑️ Deleted ${result.affectedRows} relationship records`);
+
+  // Remove related notifications
   await promisePool.execute(
-    'DELETE FROM notifications WHERE ((recipient = ? AND sender = ?) OR (recipient = ? AND sender = ?)) AND type = ?',
-    [requester, recipient, recipient, requester, 'friend_request']
+    'DELETE FROM notifications WHERE ((recipient = ? AND sender = ?) OR (recipient = ? AND sender = ?)) AND type IN (?, ?)',
+    [requester, recipient, recipient, requester, 'friend_request', 'friend_accepted']
   );
 
+  // Update friend counts if they were actually friends
   if (wereFriends) {
     await updateFriendsCount(requester, -1);
     await updateFriendsCount(recipient, -1);
-    // Optional: create "friend removed" notification
+    console.log(`📊 Updated friend counts for both users`);
   }
 
   return res.status(200).json({ success: true, message: 'Friendship removed or request cancelled' });
