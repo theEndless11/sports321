@@ -392,6 +392,7 @@ try {
 } finally {
     connection.release();
 }
+}
 
     // PUT/PATCH: Handle likes/dislikes
     if (req.method === 'PUT' || req.method === 'PATCH') {
