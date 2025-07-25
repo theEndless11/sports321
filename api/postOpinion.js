@@ -19,7 +19,7 @@ const setCorsHeaders = (req, res) => {
  const handler = async (req, res) => {
   if (req.method === 'OPTIONS') {
     setCorsHeaders(req, res); // ✅ CORS headers for preflight
-    return res.status(200).end();
+    return res.status(200).end()
   }
 
   setCorsHeaders(req, res); // 🟢 Still apply to regular requests
@@ -37,132 +37,139 @@ const setCorsHeaders = (req, res) => {
 
     const connection = await promisePool.getConnection();
     
-    try {
-        await connection.beginTransaction();
-        
-        let profilePicture = 'https://latestnewsandaffairs.site/public/pfp1.jpg'; // Default picture
-        
-        // Fetch profile picture from the users table based on username if not provided
-        const [userResult] = await connection.execute(
-            'SELECT profile_picture FROM users WHERE username = ? LIMIT 1',
-            [username]
-        );
-        
-        // If a profile picture is found for the user, use it
-        if (userResult.length > 0 && userResult[0].profile_picture) {
-            profilePicture = userResult[0].profile_picture;
-        }
-
-        let photoUrl = photo || null;
-        
-        // Use provided tags or extract from message
-        const extractedTags = tags || (message ? [...new Set(message.match(/@(\w+)/g)?.map(tag => tag.slice(1)) || [])] : []);
-        
-        // Validate replyTo if provided
-        let replyToData = null;
-        if (replyTo && replyTo.postId) {
-            const [replyPost] = await connection.execute(
-                'SELECT _id, username, message, photo, timestamp FROM posts WHERE _id = ?',
-                [replyTo.postId]
-            );
-            if (replyPost.length > 0) {
-                replyToData = {
-                    postId: replyPost[0]._id,
-                    username: replyPost[0].username,
-                    message: replyPost[0].message,
-                    photo: replyPost[0].photo,
-                    timestamp: replyPost[0].timestamp
-                };
-            } else {
-                await connection.rollback();
-                return res.status(400).json({ message: 'Replied-to post not found' });
-            }
-        }
-
-        // Insert new post into the posts table
-        const [result] = await connection.execute(
-            `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, tags, replyTo)
-             VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
-            [
-                message || '',
-                username,
-                sessionId,
-                '[]', // likedBy
-                '[]', // dislikedBy
-                '[]', // comments
-                photoUrl,
-                JSON.stringify(extractedTags),
-                replyToData ? JSON.stringify(replyToData) : null
-            ]
-        );
-
-        const postId = result.insertId;
-        
-        // Create the new post object
-        const newPost = {
-            _id: postId,
-            message: message || '',
-            timestamp: new Date(),
-            username,
-            likes: 0,
-            dislikes: 0,
-            likedBy: [],
-            dislikedBy: [],
-            comments: [],
-            photo: photoUrl,
-            profilePicture,
-            tags: extractedTags,
-            replyTo: replyToData
-        };
-
-        // ===== SEND NOTIFICATIONS TO FOLLOWERS =====
-        await sendPostNotificationsToFollowers(connection, username, postId, message, photoUrl);
-
-        // ===== SEND NOTIFICATIONS TO TAGGED USERS =====
-        if (extractedTags.length > 0) {
-            await sendTagNotifications(connection, username, extractedTags, postId, message);
-        }
-
-        // ===== SEND REPLY NOTIFICATION =====
-        if (replyToData && replyToData.username !== username) {
-            await sendReplyNotification(connection, username, replyToData.username, postId, message);
-        }
-
-        await connection.commit();
-        console.log(`✅ Post created successfully with ${extractedTags.length} tags and notifications sent`);
-        
-        // Publish the new post to Ably
-        try {
-            await publishToAbly('newOpinion', newPost);
-        } catch (error) {
-            console.error('Error publishing to Ably:', error);
-        }
-
-        return res.status(201).json(newPost);
-
-    } catch (error) {
-        await connection.rollback();
-        console.error('Error saving post:', {
-            error: error.message,
-            username,
-            postData: { message: message?.substring(0, 50), photo: !!photo }
-        });
-        return res.status(500).json({ message: 'Error saving post', error: error.message });
-    } finally {
-        connection.release();
+try {
+    await connection.beginTransaction();
+    
+    let profilePicture = 'https://latestnewsandaffairs.site/public/pfp1.jpg'; // Default picture
+    
+    // Fetch profile picture from the users table based on username if not provided
+    const [userResult] = await connection.execute(
+        'SELECT profile_picture FROM users WHERE username = ? LIMIT 1',
+        [username]
+    );
+    
+    // If a profile picture is found for the user, use it
+    if (userResult.length > 0 && userResult[0].profile_picture) {
+        profilePicture = userResult[0].profile_picture;
     }
+
+    let photoUrl = photo || null;
+    
+    // Use provided tags or extract from message
+    const extractedTags = tags || (message ? [...new Set(message.match(/@(\w+)/g)?.map(tag => tag.slice(1)) || [])] : []);
+    
+    // Validate replyTo if provided
+    let replyToData = null;
+    if (replyTo && replyTo.postId) {
+        const [replyPost] = await connection.execute(
+            'SELECT _id, username, message, photo, timestamp FROM posts WHERE _id = ?',
+            [replyTo.postId]
+        );
+        if (replyPost.length > 0) {
+            replyToData = {
+                postId: replyPost[0]._id,
+                username: replyPost[0].username,
+                message: replyPost[0].message,
+                photo: replyPost[0].photo,
+                timestamp: replyPost[0].timestamp
+            };
+        } else {
+            await connection.rollback();
+            return res.status(400).json({ message: 'Replied-to post not found' });
+        }
+    }
+
+    // Insert new post into the posts table
+    const [result] = await connection.execute(
+        `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, tags, replyTo)
+         VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+        [
+            message || '',
+            username,
+            sessionId,
+            '[]', // likedBy
+            '[]', // dislikedBy
+            '[]', // comments
+            photoUrl,
+            JSON.stringify(extractedTags),
+            replyToData ? JSON.stringify(replyToData) : null
+        ]
+    );
+
+    const postId = result.insertId;
+    
+    // Create the new post object
+    const newPost = {
+        _id: postId,
+        message: message || '',
+        timestamp: new Date(),
+        username,
+        likes: 0,
+        dislikes: 0,
+        likedBy: [],
+        dislikedBy: [],
+        comments: [],
+        photo: photoUrl,
+        profilePicture,
+        tags: extractedTags,
+        replyTo: replyToData
+    };
+
+    // ===== OPTIMIZED NOTIFICATION SYSTEM =====
+    const notificationPromises = [];
+
+    // 1. Send notifications to followers
+    if (username) {
+        notificationPromises.push(sendPostNotificationsToFollowers(connection, username, postId, message, photoUrl));
+    }
+
+    // 2. Send notifications to tagged users
+    if (extractedTags.length > 0) {
+        notificationPromises.push(sendTagNotifications(connection, username, extractedTags, postId, message));
+    }
+
+    // 3. Send reply notification
+    if (replyToData && replyToData.username !== username) {
+        notificationPromises.push(sendReplyNotification(connection, username, replyToData.username, postId, message));
+    }
+
+    // Execute all notifications concurrently
+    await Promise.allSettled(notificationPromises);
+
+    await connection.commit();
+    console.log(`✅ Post created successfully with ${extractedTags.length} tags and notifications sent`);
+    
+    // Publish the new post to Ably
+    try {
+        await publishToAbly('newOpinion', newPost);
+    } catch (error) {
+        console.error('Error publishing to Ably:', error);
+    }
+
+    return res.status(201).json(newPost);
+
+} catch (error) {
+    await connection.rollback();
+    console.error('Error saving post:', {
+        error: error.message,
+        username,
+        postData: { message: message?.substring(0, 50), photo: !!photo }
+    });
+    return res.status(500).json({ message: 'Error saving post', error: error.message });
+} finally {
+    connection.release();
 }
 
-// ===== NOTIFICATION FUNCTIONS =====
+// ===== OPTIMIZED NOTIFICATION FUNCTIONS =====
 
 /**
  * Send notifications to all followers when user creates a post
  */
 async function sendPostNotificationsToFollowers(connection, username, postId, message, photo) {
     try {
-        // Get all followers (people who follow this user)
+        // Get all followers in a single query with better performance
         const [followers] = await connection.execute(`
-            SELECT DISTINCT f.follower as follower_username
+            SELECT f.follower as username
             FROM follows f
             WHERE f.following = ? 
             AND f.relationship_status IN ('none', 'accepted')
@@ -176,33 +183,33 @@ async function sendPostNotificationsToFollowers(connection, username, postId, me
 
         console.log(`📢 Sending post notifications to ${followers.length} followers of ${username}`);
 
-        // Create notification message
+        // Create optimized notification message
         const postPreview = message 
             ? (message.length > 50 ? message.substring(0, 50) + '...' : message)
             : (photo ? 'shared a photo' : 'made a post');
         
         const notificationMessage = `${username} posted: ${postPreview}`;
+        const metadata = JSON.stringify({
+            postId: postId,
+            postType: photo ? 'photo' : 'text',
+            preview: postPreview
+        });
 
-        // Batch insert notifications for all followers
-        const notificationValues = followers.map(follower => [
-            follower.follower_username, // recipient
-            username,                   // sender
-            'new_post',                 // type
-            notificationMessage,        // message
-            JSON.stringify({            // metadata
-                postId: postId,
-                postType: photo ? 'photo' : 'text',
-                preview: postPreview
-            })
+        // Batch insert all notifications in a single query
+        const values = followers.map(follower => [
+            follower.username,      // recipient
+            username,               // sender
+            'new_post',             // type
+            notificationMessage,    // message
+            metadata                // metadata
         ]);
 
-        if (notificationValues.length > 0) {
-            // Prepare the INSERT statement with proper placeholders
-            const placeholders = notificationValues.map(() => '(?, ?, ?, ?, ?)').join(', ');
-            const flatValues = notificationValues.flat();
+        if (values.length > 0) {
+            const placeholders = values.map(() => '(?, ?, ?, ?, ?)').join(', ');
+            const flatValues = values.flat();
 
             await connection.execute(`
-                INSERT INTO notifications (recipient, sender, type, message, metadata, updated_at)
+                INSERT INTO notifications (recipient, sender, type, message, metadata)
                 VALUES ${placeholders}
             `, flatValues);
 
@@ -222,13 +229,16 @@ async function sendTagNotifications(connection, authorUsername, taggedUsers, pos
     try {
         if (!taggedUsers || taggedUsers.length === 0) return;
 
-        // Verify tagged users exist and are not the author
-        const placeholders = taggedUsers.map(() => '?').join(',');
+        // Filter out duplicates and author
+        const uniqueTags = [...new Set(taggedUsers.filter(tag => tag !== authorUsername))];
+        if (uniqueTags.length === 0) return;
+
+        // Verify tagged users exist in a single query
+        const placeholders = uniqueTags.map(() => '?').join(',');
         const [validUsers] = await connection.execute(`
             SELECT username FROM users 
-            WHERE username IN (${placeholders}) 
-            AND username != ?
-        `, [...taggedUsers, authorUsername]);
+            WHERE username IN (${placeholders})
+        `, uniqueTags);
 
         if (validUsers.length === 0) {
             console.log(`📭 No valid tagged users found`);
@@ -240,25 +250,26 @@ async function sendTagNotifications(connection, authorUsername, taggedUsers, pos
             : 'a post';
 
         const notificationMessage = `${authorUsername} mentioned you in ${postPreview}`;
+        const metadata = JSON.stringify({
+            postId: postId,
+            mentionType: 'tag'
+        });
 
-        // Create notifications for valid tagged users
-        const tagNotificationValues = validUsers.map(user => [
+        // Batch insert tag notifications
+        const values = validUsers.map(user => [
             user.username,          // recipient
-            authorUsername,         // sender
+            authorUsername,         // sender  
             'tag_mention',          // type
             notificationMessage,    // message
-            JSON.stringify({        // metadata
-                postId: postId,
-                mentionType: 'tag'
-            })
+            metadata                // metadata
         ]);
 
-        if (tagNotificationValues.length > 0) {
-            const placeholders = tagNotificationValues.map(() => '(?, ?, ?, ?, ?)').join(', ');
-            const flatValues = tagNotificationValues.flat();
+        if (values.length > 0) {
+            const placeholders = values.map(() => '(?, ?, ?, ?, ?)').join(', ');
+            const flatValues = values.flat();
 
             await connection.execute(`
-                INSERT INTO notifications (recipient, sender, type, message, metadata, updated_at)
+                INSERT INTO notifications (recipient, sender, type, message, metadata)
                 VALUES ${placeholders}
             `, flatValues);
 
@@ -281,7 +292,7 @@ async function sendReplyNotification(connection, replierUsername, originalAuthor
 
         // Verify the original author exists
         const [userExists] = await connection.execute(
-            'SELECT username FROM users WHERE username = ?',
+            'SELECT 1 FROM users WHERE username = ? LIMIT 1',
             [originalAuthor]
         );
 
@@ -292,19 +303,20 @@ async function sendReplyNotification(connection, replierUsername, originalAuthor
             : 'replied to your post';
 
         const notificationMessage = `${replierUsername} replied: ${replyPreview}`;
+        const metadata = JSON.stringify({
+            postId: postId,
+            replyType: 'post_reply'
+        });
 
         await connection.execute(`
-            INSERT INTO notifications (recipient, sender, type, message, metadata, updated_at)
-            VALUES (?, ?, ?, ?, ?, NOW())
+            INSERT INTO notifications (recipient, sender, type, message, metadata)
+            VALUES (?, ?, ?, ?, ?)
         `, [
             originalAuthor,
             replierUsername,
             'post_reply',
             notificationMessage,
-            JSON.stringify({
-                postId: postId,
-                replyType: 'post_reply'
-            })
+            metadata
         ]);
 
         console.log(`✅ Sent reply notification to ${originalAuthor}`);
@@ -316,31 +328,66 @@ async function sendReplyNotification(connection, replierUsername, originalAuthor
 }
 
 /**
- * Enhanced notification helper with metadata support
+ * Enhanced notification helper with duplicate prevention
  */
 async function createNotificationWithMetadata(connection, recipient, sender, type, message, metadata = null) {
     try {
-        // Prevent duplicate notifications within 2 minutes
+        // Prevent duplicate notifications within 2 minutes using created_at
         const [existing] = await connection.execute(`
             SELECT id FROM notifications 
             WHERE recipient = ? AND sender = ? AND type = ? AND message = ?
-            AND updated_at > DATE_SUB(NOW(), INTERVAL 2 MINUTE)
+            AND created_at > DATE_SUB(NOW(), INTERVAL 2 MINUTE)
+            LIMIT 1
         `, [recipient, sender, type, message]);
         
         if (existing.length > 0) {
             console.log(`⚠️ Duplicate notification prevented: ${type} from ${sender} to ${recipient}`);
-            return;
+            return null;
         }
         
-        await connection.execute(`
-            INSERT INTO notifications (recipient, sender, type, message, metadata, updated_at) 
-            VALUES (?, ?, ?, ?, ?, NOW())
+        const [result] = await connection.execute(`
+            INSERT INTO notifications (recipient, sender, type, message, metadata) 
+            VALUES (?, ?, ?, ?, ?)
         `, [recipient, sender, type, message, metadata ? JSON.stringify(metadata) : null]);
         
         console.log(`✅ Notification created: ${type} from ${sender} to ${recipient}`);
+        return result.insertId;
+        
     } catch (error) {
         console.error('Error creating notification:', error);
-        // Don't throw - notifications shouldn't break the main flow
+        return null;
+    }
+}
+
+/**
+ * Bulk notification creation for better performance
+ */
+async function createBulkNotifications(connection, notifications) {
+    try {
+        if (!notifications || notifications.length === 0) return;
+
+        const values = notifications.map(notif => [
+            notif.recipient,
+            notif.sender,
+            notif.type,
+            notif.message,
+            notif.metadata ? JSON.stringify(notif.metadata) : null
+        ]);
+
+        const placeholders = values.map(() => '(?, ?, ?, ?, ?)').join(', ');
+        const flatValues = values.flat();
+
+        const [result] = await connection.execute(`
+            INSERT INTO notifications (recipient, sender, type, message, metadata)
+            VALUES ${placeholders}
+        `, flatValues);
+
+        console.log(`✅ Created ${notifications.length} bulk notifications`);
+        return result;
+
+    } catch (error) {
+        console.error('Error creating bulk notifications:', error);
+        return null;
     }
 }
 
