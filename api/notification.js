@@ -31,28 +31,37 @@ const handler = async (req, res) => {
     }
 
     // 🔹 GET notifications
-    if (method === 'GET' && action !== 'count') {
-      const [notifications] = await promisePool.execute(
-        `SELECT id, recipient, sender, type, message, created_at
-         FROM notifications
-         WHERE recipient = ?
-         ORDER BY created_at DESC
-         LIMIT 50`,
-        [username]
-      );
-      console.log(`Fetched ${notifications.length} notifications for ${username}`);
-      return res.status(200).json(notifications);
-    }
+if (method === 'GET' && action !== 'count') {
+  const [notifications] = await promisePool.execute(
+    `SELECT id, recipient, sender, type, message, created_at, metadata
+     FROM notifications
+     WHERE recipient = ?
+     ORDER BY created_at DESC
+     LIMIT 50`,
+    [username]
+  );
+  
+  // Process notifications to ensure metadata is properly parsed
+  const processedNotifications = notifications.map(notification => ({
+    ...notification,
+    metadata: notification.metadata ? 
+      (typeof notification.metadata === 'string' ? 
+        JSON.parse(notification.metadata) : 
+        notification.metadata
+      ) : null
+  }));
+  
+  return res.status(200).json(processedNotifications);
+}
 
-    // 🔸 GET notification count
-    if (method === 'GET' && action === 'count') {
-      const [result] = await promisePool.execute(
-        'SELECT COUNT(*) AS count FROM notifications WHERE recipient = ?',
-        [username]
-      );
-      return res.status(200).json({ count: result[0].count });
-    }
-
+// Get notification count endpoint
+if (method === 'GET' && action === 'count') {
+  const [result] = await promisePool.execute(
+    'SELECT COUNT(*) AS count FROM notifications WHERE recipient = ?',
+    [username]
+  );
+  return res.status(200).json({ count: result[0].count });
+}
     // 🧹 DELETE old notifications
     if (method === 'DELETE' && action === 'cleanup') {
       await promisePool.execute(
