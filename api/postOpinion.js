@@ -16,149 +16,7 @@ const setCorsHeaders = (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
- const handler = async (req, res) => {
-  if (req.method === 'OPTIONS') {
-    setCorsHeaders(req, res); // ✅ CORS headers for preflight
-    return res.status(200).end()
-  }
 
-  setCorsHeaders(req, res); // 🟢 Still apply to regular requests
-
-    // POST: Create new post
-   if (req.method === 'POST') {
-    const { message, username, sessionId, photo, profilePic, tags, replyTo } = req.body;
-    
-    if (!username || !sessionId) {
-        return res.status(400).json({ message: 'Username and sessionId are required' });
-    }
-    if (!message && !photo) {
-        return res.status(400).json({ message: 'Post content cannot be empty' });
-    }
-
-    const connection = await promisePool.getConnection();
-    
-try {
-    await connection.beginTransaction();
-    
-    let profilePicture = 'https://latestnewsandaffairs.site/public/pfp1.jpg'; // Default picture
-    
-    // Fetch profile picture from the users table based on username if not provided
-    const [userResult] = await connection.execute(
-        'SELECT profile_picture FROM users WHERE username = ? LIMIT 1',
-        [username]
-    );
-    
-    // If a profile picture is found for the user, use it
-    if (userResult.length > 0 && userResult[0].profile_picture) {
-        profilePicture = userResult[0].profile_picture;
-    }
-
-    let photoUrl = photo || null;
-    
-    // Use provided tags or extract from message
-    const extractedTags = tags || (message ? [...new Set(message.match(/@(\w+)/g)?.map(tag => tag.slice(1)) || [])] : []);
-    
-    // Validate replyTo if provided
-    let replyToData = null;
-    if (replyTo && replyTo.postId) {
-        const [replyPost] = await connection.execute(
-            'SELECT _id, username, message, photo, timestamp FROM posts WHERE _id = ?',
-            [replyTo.postId]
-        );
-        if (replyPost.length > 0) {
-            replyToData = {
-                postId: replyPost[0]._id,
-                username: replyPost[0].username,
-                message: replyPost[0].message,
-                photo: replyPost[0].photo,
-                timestamp: replyPost[0].timestamp
-            };
-        } else {
-            await connection.rollback();
-            return res.status(400).json({ message: 'Replied-to post not found' });
-        }
-    }
-
-    // Insert new post into the posts table
-    const [result] = await connection.execute(
-        `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, tags, replyTo)
-         VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
-        [
-            message || '',
-            username,
-            sessionId,
-            '[]', // likedBy
-            '[]', // dislikedBy
-            '[]', // comments
-            photoUrl,
-            JSON.stringify(extractedTags),
-            replyToData ? JSON.stringify(replyToData) : null
-        ]
-    );
-
-    const postId = result.insertId;
-    
-    // Create the new post object
-    const newPost = {
-        _id: postId,
-        message: message || '',
-        timestamp: new Date(),
-        username,
-        likes: 0,
-        dislikes: 0,
-        likedBy: [],
-        dislikedBy: [],
-        comments: [],
-        photo: photoUrl,
-        profilePicture,
-        tags: extractedTags,
-        replyTo: replyToData
-    };
-
-    // ===== OPTIMIZED NOTIFICATION SYSTEM =====
-    const notificationPromises = [];
-
-    // 1. Send notifications to followers
-    if (username) {
-        notificationPromises.push(sendPostNotificationsToFollowers(connection, username, postId, message, photoUrl));
-    }
-
-    // 2. Send notifications to tagged users
-    if (extractedTags.length > 0) {
-        notificationPromises.push(sendTagNotifications(connection, username, extractedTags, postId, message));
-    }
-
-    // 3. Send reply notification
-    if (replyToData && replyToData.username !== username) {
-        notificationPromises.push(sendReplyNotification(connection, username, replyToData.username, postId, message));
-    }
-
-    // Execute all notifications concurrently
-    await Promise.allSettled(notificationPromises);
-
-    await connection.commit();
-    console.log(`✅ Post created successfully with ${extractedTags.length} tags and notifications sent`);
-    
-    // Publish the new post to Ably
-    try {
-        await publishToAbly('newOpinion', newPost);
-    } catch (error) {
-        console.error('Error publishing to Ably:', error);
-    }
-
-    return res.status(201).json(newPost);
-
-} catch (error) {
-    await connection.rollback();
-    console.error('Error saving post:', {
-        error: error.message,
-        username,
-        postData: { message: message?.substring(0, 50), photo: !!photo }
-    });
-    return res.status(500).json({ message: 'Error saving post', error: error.message });
-} finally {
-    connection.release();
-}
 
 // ===== OPTIMIZED NOTIFICATION FUNCTIONS =====
 
@@ -391,10 +249,154 @@ async function createBulkNotifications(connection, notifications) {
     }
 }
 
+ const handler = async (req, res) => {
+  if (req.method === 'OPTIONS') {
+    setCorsHeaders(req, res); // ✅ CORS headers for preflight
+    return res.status(200).end()
+  }
+
+  setCorsHeaders(req, res); // 🟢 Still apply to regular requests
+
+    // POST: Create new post
+   if (req.method === 'POST') {
+    const { message, username, sessionId, photo, profilePic, tags, replyTo } = req.body;
+    
+    if (!username || !sessionId) {
+        return res.status(400).json({ message: 'Username and sessionId are required' });
+    }
+    if (!message && !photo) {
+        return res.status(400).json({ message: 'Post content cannot be empty' });
+    }
+
+    const connection = await promisePool.getConnection();
+    
+try {
+    await connection.beginTransaction();
+    
+    let profilePicture = 'https://latestnewsandaffairs.site/public/pfp1.jpg'; // Default picture
+    
+    // Fetch profile picture from the users table based on username if not provided
+    const [userResult] = await connection.execute(
+        'SELECT profile_picture FROM users WHERE username = ? LIMIT 1',
+        [username]
+    );
+    
+    // If a profile picture is found for the user, use it
+    if (userResult.length > 0 && userResult[0].profile_picture) {
+        profilePicture = userResult[0].profile_picture;
+    }
+
+    let photoUrl = photo || null;
+    
+    // Use provided tags or extract from message
+    const extractedTags = tags || (message ? [...new Set(message.match(/@(\w+)/g)?.map(tag => tag.slice(1)) || [])] : []);
+    
+    // Validate replyTo if provided
+    let replyToData = null;
+    if (replyTo && replyTo.postId) {
+        const [replyPost] = await connection.execute(
+            'SELECT _id, username, message, photo, timestamp FROM posts WHERE _id = ?',
+            [replyTo.postId]
+        );
+        if (replyPost.length > 0) {
+            replyToData = {
+                postId: replyPost[0]._id,
+                username: replyPost[0].username,
+                message: replyPost[0].message,
+                photo: replyPost[0].photo,
+                timestamp: replyPost[0].timestamp
+            };
+        } else {
+            await connection.rollback();
+            return res.status(400).json({ message: 'Replied-to post not found' });
+        }
+    }
+
+    // Insert new post into the posts table
+    const [result] = await connection.execute(
+        `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, tags, replyTo)
+         VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+        [
+            message || '',
+            username,
+            sessionId,
+            '[]', // likedBy
+            '[]', // dislikedBy
+            '[]', // comments
+            photoUrl,
+            JSON.stringify(extractedTags),
+            replyToData ? JSON.stringify(replyToData) : null
+        ]
+    );
+
+    const postId = result.insertId;
+    
+    // Create the new post object
+    const newPost = {
+        _id: postId,
+        message: message || '',
+        timestamp: new Date(),
+        username,
+        likes: 0,
+        dislikes: 0,
+        likedBy: [],
+        dislikedBy: [],
+        comments: [],
+        photo: photoUrl,
+        profilePicture,
+        tags: extractedTags,
+        replyTo: replyToData
+    };
+
+    // ===== OPTIMIZED NOTIFICATION SYSTEM =====
+    const notificationPromises = [];
+
+    // 1. Send notifications to followers
+    if (username) {
+        notificationPromises.push(sendPostNotificationsToFollowers(connection, username, postId, message, photoUrl));
+    }
+
+    // 2. Send notifications to tagged users
+    if (extractedTags.length > 0) {
+        notificationPromises.push(sendTagNotifications(connection, username, extractedTags, postId, message));
+    }
+
+    // 3. Send reply notification
+    if (replyToData && replyToData.username !== username) {
+        notificationPromises.push(sendReplyNotification(connection, username, replyToData.username, postId, message));
+    }
+
+    // Execute all notifications concurrently
+    await Promise.allSettled(notificationPromises);
+
+    await connection.commit();
+    console.log(`✅ Post created successfully with ${extractedTags.length} tags and notifications sent`);
+    
+    // Publish the new post to Ably
+    try {
+        await publishToAbly('newOpinion', newPost);
+    } catch (error) {
+        console.error('Error publishing to Ably:', error);
+    }
+
+    return res.status(201).json(newPost);
+
+} catch (error) {
+    await connection.rollback();
+    console.error('Error saving post:', {
+        error: error.message,
+        username,
+        postData: { message: message?.substring(0, 50), photo: !!photo }
+    });
+    return res.status(500).json({ message: 'Error saving post', error: error.message });
+} finally {
+    connection.release();
+}
+
     // PUT/PATCH: Handle likes/dislikes
     if (req.method === 'PUT' || req.method === 'PATCH') {
         const { postId, action, username } = req.body;
-
+      
         if (!postId || !action || !username) {
             return res.status(400).json({ message: 'Post ID, action, and username are required' });
         }
@@ -475,4 +477,5 @@ async function createBulkNotifications(connection, notifications) {
     // Handle other methods
     return res.status(405).json({ message: 'Method Not Allowed' });
 };
+   
 module.exports = handler;
