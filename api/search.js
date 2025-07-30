@@ -80,7 +80,7 @@ module.exports = async function handler(req, res) {
             // Fetch user details with updated counts
             const userQuery = `
                 SELECT 
-                    id,location, status, profession, hobby, profile_picture, description,
+                    id, created_at, hobby, profile_picture, description,
                     followers_count AS followersCount,
                     following_count AS followingCount,
                     friends_count AS friendsCount
@@ -132,9 +132,7 @@ module.exports = async function handler(req, res) {
                 user: {
                     username: username,
                     id: user.id,
-                    location: user.location || 'Location not available',
-                    status: user.status || 'Status not available',
-                    profession: user.profession || 'Profession not available',
+                    created_at: user.created_at || 'created_at not available',
                     hobby: user.hobby || 'Hobby not available',
                     profile_picture: userProfilePicture,
                     description: user.description || 'No description available',
