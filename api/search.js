@@ -133,7 +133,7 @@ module.exports = async function handler(req, res) {
                     username: username,
                     id: user.id,
                     created_at: user.created_at || 'created_at not available',
-                    hobby: user.hobby || 'Hobby not available',
+                    Music: user.Music || 'Music not available',
                     profile_picture: userProfilePicture,
                     description: user.description || 'No description available',
                     followers_count: finalCounts.followersCount,
