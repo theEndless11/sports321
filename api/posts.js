@@ -1,219 +1,179 @@
-const { promisePool } = require('../utils/db'); // MySQL connection pool
+const { promisePool } = require('../utils/db');
 
-// Set CORS headers
 const setCorsHeaders = (res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');  
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');  
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');  
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 };
 
 module.exports = async function handler(req, res) {
-  setCorsHeaders(res); 
+  setCorsHeaders(res);
 
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const defaultPfp = 'https://latestnewsandaffairs.site/public/pfp.jpg';
+
+  if (req.method === 'GET') {
+    const {
+      username,
+      username_like,
+      start_timestamp,
+      end_timestamp,
+      page = 1,
+      limit = 5,
+      sort
+    } = req.query;
+
+    // Handle user profile fetch
+    if (username && !username_like && !start_timestamp && !end_timestamp) {
+      const [rows] = await promisePool.execute(
+        'SELECT username, profile_picture, Music, description, created_at FROM users WHERE username = ?',
+        [username]
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      const user = rows[0];
+      return res.status(200).json({
+        username: user.username,
+        profilePicture: user.profile_picture,
+        Music: user.Music || 'Music not available',
+        description: user.description || 'No description available',
+        created_at: user.created_at || 'created_at not available'
+      });
     }
 
-if (req.method === 'GET') {
-    const { username_like, start_timestamp, end_timestamp, username, page = 1, limit = 5, sort } = req.query;
-    let sqlQuery = 'SELECT * FROM posts';
-    let queryParams = [];
-    const offset = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+    // Handle posts fetching
+    let sql = 'SELECT * FROM posts';
+    const params = [];
+    const offset = (parseInt(page) - 1) * parseInt(limit);
 
     if (username_like) {
-        sqlQuery += ' WHERE username LIKE ?';
-        queryParams.push(`%${username_like}%`);
+      sql += ' WHERE username LIKE ?';
+      params.push(`%${username_like}%`);
     }
 
     if (start_timestamp && end_timestamp) {
-        sqlQuery += queryParams.length ? ' AND' : ' WHERE';
-        sqlQuery += ' timestamp BETWEEN ? AND ?';
-        queryParams.push(start_timestamp, end_timestamp);
+      sql += params.length ? ' AND' : ' WHERE';
+      sql += ' timestamp BETWEEN ? AND ?';
+      params.push(start_timestamp, end_timestamp);
     }
 
     const sortOptions = {
-         'most-liked': 'likes DESC',
-         'most-comments': 'CHAR_LENGTH(comments) DESC',
-        'newest': 'timestamp DESC'
+      'most-liked': 'likes DESC',
+      'most-comments': 'CHAR_LENGTH(comments) DESC',
+      'newest': 'timestamp DESC'
     };
-    sqlQuery += ` ORDER BY ${sortOptions[sort] || 'timestamp DESC'} LIMIT ? OFFSET ?`;
-    queryParams.push(parseInt(limit, 10), offset);
 
-try {
-    const [results] = await promisePool.execute(sqlQuery, queryParams);
-    const usernames = [...new Set(results.map(post => post.username))];
+    sql += ` ORDER BY ${sortOptions[sort] || 'timestamp DESC'} LIMIT ? OFFSET ?`;
+    params.push(parseInt(limit), offset);
 
-    // Extract usernames from replyTo fields
-    const replyToUsernames = results
-        .map(post => {
-            try {
-                const replyTo = post.replyTo ? JSON.parse(post.replyTo) : null;
-                return replyTo?.username;
-            } catch {
-                return null;
-            }
-        })
-        .filter(Boolean);
+    const [posts] = await promisePool.execute(sql, params);
 
-    // Combine all unique usernames
+    const usernames = new Set(posts.map(p => p.username));
+    const replyToUsernames = posts.flatMap(p => {
+      try {
+        const reply = p.replyTo ? JSON.parse(p.replyTo) : null;
+        return reply?.username ? [reply.username] : [];
+      } catch {
+        return [];
+      }
+    });
+
     const allUsernames = [...new Set([...usernames, ...replyToUsernames])];
 
-    let postsResponse = { posts: [], hasMorePosts: false };
-
+    const usersMap = {};
     if (allUsernames.length) {
-        // Fetch profile pictures for all relevant users
-        const usersQuery = `SELECT username, profile_picture FROM users WHERE username IN (${allUsernames.map(() => '?').join(',')})`;
-        const [usersResult] = await promisePool.execute(usersQuery, allUsernames);
+      const userSql = `SELECT username, profile_picture FROM users WHERE username IN (${allUsernames.map(() => '?').join(',')})`;
+      const [users] = await promisePool.execute(userSql, allUsernames);
 
-        // Map usernames to profile pictures
-        const usersMap = usersResult.reduce((acc, user) => {
-            acc[user.username.toLowerCase()] = user.profile_picture
-                ? (user.profile_picture.startsWith('data:image') ? user.profile_picture : `data:image/jpeg;base64,${user.profile_picture}`)
-                : 'https://latestnewsandaffairs.site/public/pfp.jpg';
-            return acc;
-        }, {});
-
-        // Process posts and enrich comments
-        postsResponse.posts = results.map(post => {
-            // Enrich comments with profile pictures
-            const enrichedComments = (post.comments ? JSON.parse(post.comments) : []).map(comment => ({
-                ...comment,
-                profilePicture: usersMap[comment.username?.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
-                replies: (comment.replies || []).map(reply => ({
-                    ...reply,
-                    profilePicture: usersMap[reply.username?.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
-                }))
-            }));
-
-            // Enrich replyTo with profile picture
-            let replyToData = post.replyTo ? JSON.parse(post.replyTo) : null;
-            if (replyToData) {
-                replyToData.profilePicture = usersMap[replyToData.username?.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg';
-            }
-
-            // Return enriched post object
-            return {
-                _id: post._id,
-                message: post.message,
-                timestamp: post.timestamp,
-                username: post.username,
-                sessionId: post.sessionId,
-                likes: post.likes,
-                dislikes: post.dislikes,
-                likedBy: post.likedBy ? JSON.parse(post.likedBy) : [],
-                dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
-                hearts: post.hearts,
-                comments: enrichedComments,
-                photo: post.photo && (post.photo.startsWith('http') || post.photo.startsWith('data:image/'))
-                    ? post.photo
-                    : post.photo ? `data:image/jpeg;base64,${post.photo.toString('base64')}` : null,
-                profilePicture: usersMap[post.username.toLowerCase()] || 'https://latestnewsandaffairs.site/public/pfp.jpg',
-                tags: post.tags ? JSON.parse(post.tags) : [],
-                replyTo: replyToData
-            };
-        });
-            // Count total posts with the same filters
-            const totalPostsQuery = `SELECT COUNT(*) AS count FROM posts${username_like || start_timestamp ? ' WHERE' : ''} ${username_like ? 'username LIKE ?' : ''} ${username_like && start_timestamp ? ' AND ' : ''} ${start_timestamp ? 'timestamp BETWEEN ? AND ?' : ''}`;
-            const [totalResult] = await promisePool.execute(totalPostsQuery, queryParams.slice(0, queryParams.length - 2));
-            postsResponse.hasMorePosts = (parseInt(page, 10) * parseInt(limit, 10)) < totalResult[0].count;
-        }
-
-// Fetch user profile if requested
-if (username) {
-    try {
-        const userQuery = 'SELECT location, status, profession, hobby, description, profile_picture FROM users WHERE username = ?';
-        const [userResult] = await promisePool.execute(userQuery, [username]);
-
-        if (userResult.length) {
-            // If profile_picture exists, it should already be in Base64 format (in your case it is)
-            return res.status(200).json(userResult[0]);
-        } else {
-            return res.status(200).json({
-                username,
-                location: 'Location not available',
-                status: 'Status not available',
-                profession: 'Profession not available',
-                hobby: 'Hobby not available',
-                description: 'No description available',
-                profile_picture: 'https://latestnewsandaffairs.site/public/pfp.jpg', // Default profile picture if none found
-            });
-        }
-    } catch (userError) {
-        console.error('❌ Error retrieving user profile:', userError);
-        return res.status(500).json({ message: 'Error retrieving user profile', error: userError });
+      users.forEach(u => {
+        usersMap[u.username.toLowerCase()] = u.profile_picture?.startsWith('data:image')
+          ? u.profile_picture
+          : `data:image/jpeg;base64,${u.profile_picture}` || defaultPfp;
+      });
     }
-}
 
-return res.status(200).json(postsResponse); // Fetch posts data
+    const enrichedPosts = posts.map(p => {
+      const comments = p.comments ? JSON.parse(p.comments) : [];
+      const enrichedComments = comments.map(c => ({
+        ...c,
+        profilePicture: usersMap[c.username?.toLowerCase()] || defaultPfp,
+        replies: (c.replies || []).map(r => ({
+          ...r,
+          profilePicture: usersMap[r.username?.toLowerCase()] || defaultPfp
+        }))
+      }));
 
-        } catch (error) {
-            console.error('❌ Error retrieving posts:', error);
-            return res.status(500).json({ message: 'Error retrieving posts', error });
-        }
-    }
-    // Handle POST requests for updating location, status, profession, hobby, description, and profile picture
-if (req.method === 'POST') {
+      const replyToData = p.replyTo ? JSON.parse(p.replyTo) : null;
+      if (replyToData) {
+        replyToData.profilePicture = usersMap[replyToData.username?.toLowerCase()] || defaultPfp;
+      }
+
+      return {
+        _id: p._id,
+        message: p.message,
+        timestamp: p.timestamp,
+        username: p.username,
+        sessionId: p.sessionId,
+        likes: p.likes,
+        dislikes: p.dislikes,
+        likedBy: p.likedBy ? JSON.parse(p.likedBy) : [],
+        dislikedBy: p.dislikedBy ? JSON.parse(p.dislikedBy) : [],
+        hearts: p.hearts,
+        comments: enrichedComments,
+        photo: p.photo?.startsWith('http') || p.photo?.startsWith('data:image')
+          ? p.photo
+          : p.photo ? `data:image/jpeg;base64,${p.photo.toString('base64')}` : null,
+        profilePicture: usersMap[p.username.toLowerCase()] || defaultPfp,
+        tags: p.tags ? JSON.parse(p.tags) : [],
+        replyTo: replyToData
+      };
+    });
+
+    const countQuery = `SELECT COUNT(*) AS count FROM posts${username_like || start_timestamp ? ' WHERE' : ''} ${username_like ? 'username LIKE ?' : ''}${username_like && start_timestamp ? ' AND ' : ''}${start_timestamp ? 'timestamp BETWEEN ? AND ?' : ''}`;
+    const countParams = params.slice(0, params.length - 2);
+    const [countResult] = await promisePool.execute(countQuery, countParams);
+
+    return res.status(200).json({
+      posts: enrichedPosts,
+      hasMorePosts: (page * limit) < countResult[0].count
+    });
+  }
+
+  if (req.method === 'POST') {
     const { username, hobby, description, profilePicture } = req.body;
     if (!username) {
-        return res.status(400).json({ message: 'Username is required' });
+      return res.status(400).json({ message: 'Username is required' });
     }
-    try {
-        // Update hobby in the users table
-        if (hobby) {
-            const updateQuery = `UPDATE users SET hobby = ? WHERE username = ?`;
-            await promisePool.execute(updateQuery, [hobby, username]);
-        }
-        // Handle updating description and profile picture in the users table
-        if (description || profilePicture) {
-            const updateFields = [];
-            const updateValues = [];
-            
-            if (description) {
-                updateFields.push('description = ?');
-                updateValues.push(description);
-            }
-            if (profilePicture) {
-                updateFields.push('profile_picture = ?');
-                updateValues.push(profilePicture);
-            }
-            // Add the condition to the end (username)
-            updateValues.push(username);
-            const updateQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE username = ?`;
-            await promisePool.execute(updateQuery, updateValues);
-        }
-        return res.status(200).json({ message: 'Profile updated successfully' });
-    } catch (error) {
-        console.error('❌ Error updating profile:', error);
-        return res.status(500).json({ message: 'Error updating profile', error });
+
+    if (Music) {
+      await promisePool.execute('UPDATE users SET Music = ? WHERE username = ?', [Music, username]);
     }
-}
-// GET request handler (include created_at for retrieval only)
-if (req.method === 'GET') {
-    const { username } = req.query;
-    if (!username) {
-        return res.status(400).json({ message: 'Username is required' });
+
+    const updates = [];
+    const values = [];
+
+    if (description) {
+      updates.push('description = ?');
+      values.push(description);
     }
-    try {
-        const [rows] = await promisePool.execute(
-            'SELECT username, profile_picture, Music, description, created_at FROM users WHERE username = ?',
-            [username]
-        );
-        if (rows.length === 0) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-        const user = rows[0];
-        return res.status(200).json({
-            username: user.username,
-            profilePicture: user.profile_picture,
-            Music: user.Music,
-            description: user.description,
-            created_at: user.created_at
-        });
-    } catch (error) {
-        console.error('❌ Error fetching profile:', error);
-        return res.status(500).json({ message: 'Error fetching profile', error });
+
+    if (profilePicture) {
+      updates.push('profile_picture = ?');
+      values.push(profilePicture);
     }
-}
-    return res.status(405).json({ message: 'Method Not Allowed' });
+
+    if (updates.length) {
+      values.push(username);
+      await promisePool.execute(`UPDATE users SET ${updates.join(', ')} WHERE username = ?`, values);
+    }
+
+    return res.status(200).json({ message: 'Profile updated successfully' });
+  }
+
+  return res.status(405).json({ message: 'Method Not Allowed' });
 };
 
