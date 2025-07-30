@@ -195,7 +195,7 @@ if (req.method === 'GET') {
     }
     try {
         const [rows] = await promisePool.execute(
-            'SELECT username, email, profile_picture, hobby, description, created_at FROM users WHERE username = ?',
+            'SELECT username, profile_picture, Music, description, created_at FROM users WHERE username = ?',
             [username]
         );
         if (rows.length === 0) {
@@ -205,9 +205,9 @@ if (req.method === 'GET') {
         return res.status(200).json({
             username: user.username,
             profilePicture: user.profile_picture,
-            hobby: user.hobby,
+            Music: user.Music,
             description: user.description,
-            createdAt: user.created_at
+            created_at: user.created_at
         });
     } catch (error) {
         console.error('❌ Error fetching profile:', error);
