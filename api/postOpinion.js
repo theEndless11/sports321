@@ -127,14 +127,14 @@ const classifyPostContent = async (message, photo) => {
   try {
     console.log('Starting classification for message:', message.substring(0, 50) + '...');
     
-    // Add timeout controller (10 seconds)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     
-    const response = await fetch(`https://api.uclassify.com/v1/uClassify/Topics/classify/?writekey=TQoEnD7yLfCM`, {
+    const response = await fetch('https://api.uclassify.com/v1/uClassify/Topics/classify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': 'Token TQoEnD7yLfCM' // ✅ Correct usage
       },
       body: JSON.stringify({
         texts: [message]
@@ -210,6 +210,8 @@ const classifyPostContent = async (message, photo) => {
     return null;
   }
 };
+
+
 
 
 const handler = async (req, res) => {
