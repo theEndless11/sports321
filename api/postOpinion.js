@@ -125,94 +125,164 @@ const classifyPostContent = async (message, photo) => {
   }
 
   try {
-    console.log('Starting classification for message:', message.substring(0, 50) + '...');
+    console.log('Starting TextRazor classification for message:', message.substring(0, 50) + '...');
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // Increased timeout for TextRazor
     
-    const response = await fetch('https://api.uclassify.com/v1/uClassify/Topics/classify', {
+    // Prepare form data for TextRazor API
+    const formData = new URLSearchParams();
+    formData.append('text', message);
+    formData.append('extractors', 'topics');
+    formData.append('classifiers', 'textrazor_newscodes'); // News classification
+    
+    const response = await fetch('https://api.textrazor.com/', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Token m1vAIGKPT6Op' // ✅ Correct Read Key
+        'X-TextRazor-Key': 'f2abfeb4c8109ec04dd89415b0e07208f9c8741e469f4208afc9cac7',
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: JSON.stringify({
-        texts: [message]
-      }),
+      body: formData,
       signal: controller.signal
     });
 
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.error('uClassify API error:', response.status, await response.text());
+      console.error('TextRazor API error:', response.status, await response.text());
       return null;
     }
 
     const data = await response.json();
-    console.log('Classification completed successfully');
+    console.log('TextRazor classification completed successfully');
     
-    const classification = data[0]?.classification;
+    // Extract categories from TextRazor response
+    const categories = [];
     
-    if (!classification) {
-      console.log('No classification data received');
-      return null;
+    // Process topics (general categorization)
+    if (data.response && data.response.topics) {
+      data.response.topics.forEach(topic => {
+        if (topic.score > 0.5) { // Only high confidence topics
+          const categoryName = mapTextRazorCategory(topic.label);
+          if (categoryName) {
+            categories.push({
+              category: categoryName,
+              confidence: parseFloat(topic.score.toFixed(3)),
+              source: 'topics'
+            });
+          }
+        }
+      });
+    }
+    
+    // Process news categories if available
+    if (data.response && data.response.categories) {
+      data.response.categories.forEach(category => {
+        if (category.score > 0.3) { // Lower threshold for news categories
+          const categoryName = mapNewsCategory(category.label);
+          if (categoryName) {
+            categories.push({
+              category: categoryName,
+              confidence: parseFloat(category.score.toFixed(3)),
+              source: 'news'
+            });
+          }
+        }
+      });
     }
 
-    const categoryMapping = {
-      'sports': 'Sports',
-      'recreation': 'Sports', 
-      'health': 'Sports',
-      'politics': 'News',
-      'society': 'News',
-      'law': 'News',
-      'business': 'News',
-      'economics': 'News',
-      'humor': 'Funny',
-      'entertainment': 'Entertainment',
-      'arts': 'Entertainment',
-      'games': 'Entertainment',
-      'music': 'Entertainment',
-      'movies': 'Entertainment',
-      'television': 'Entertainment',
-      'culture': 'Entertainment'
-    };
+    // Remove duplicates and sort by confidence
+    const uniqueCategories = categories
+      .reduce((acc, curr) => {
+        const existing = acc.find(cat => cat.category === curr.category);
+        if (!existing || existing.confidence < curr.confidence) {
+          return [...acc.filter(cat => cat.category !== curr.category), curr];
+        }
+        return acc;
+      }, [])
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 3) // Top 3 categories
+      .map(({ category, confidence }) => ({ category, confidence }));
 
-    const mappedCategories = {};
-    
-    Object.entries(classification).forEach(([category, confidence]) => {
-      const mappedCategory = categoryMapping[category.toLowerCase()];
-      if (mappedCategory && confidence > 0.1) {
-        mappedCategories[mappedCategory] = (mappedCategories[mappedCategory] || 0) + confidence;
-      }
-    });
-
-    console.log('Mapped categories:', mappedCategories);
-
-    const topCategories = Object.entries(mappedCategories)
-      .filter(([_, confidence]) => confidence > 0.15)
-      .sort(([,a], [,b]) => b - a)
-      .slice(0, 2)
-      .map(([category, confidence]) => ({
-        category,
-        confidence: parseFloat(confidence.toFixed(3))
-      }));
-
-    console.log('Final categories:', topCategories);
-    return topCategories.length > 0 ? topCategories : null;
+    console.log('Final TextRazor categories:', uniqueCategories);
+    return uniqueCategories.length > 0 ? uniqueCategories : null;
 
   } catch (error) {
     if (error.name === 'AbortError') {
-      console.error('Classification timeout after 10 seconds');
+      console.error('TextRazor classification timeout after 15 seconds');
     } else {
-      console.error('Classification error:', error);
+      console.error('TextRazor classification error:', error);
     }
     return null;
   }
 };
 
+// Map TextRazor topic labels to our categories
+const mapTextRazorCategory = (label) => {
+  const lowerLabel = label.toLowerCase();
+  
+  // Sports mapping
+  if (lowerLabel.includes('sport') || lowerLabel.includes('football') || 
+      lowerLabel.includes('basketball') || lowerLabel.includes('soccer') ||
+      lowerLabel.includes('tennis') || lowerLabel.includes('baseball') ||
+      lowerLabel.includes('cricket') || lowerLabel.includes('golf') ||
+      lowerLabel.includes('fitness') || lowerLabel.includes('exercise')) {
+    return 'Sports';
+  }
+  
+  // News/Politics mapping
+  if (lowerLabel.includes('politic') || lowerLabel.includes('government') ||
+      lowerLabel.includes('election') || lowerLabel.includes('policy') ||
+      lowerLabel.includes('news') || lowerLabel.includes('current events') ||
+      lowerLabel.includes('international') || lowerLabel.includes('domestic') ||
+      lowerLabel.includes('economy') || lowerLabel.includes('business') ||
+      lowerLabel.includes('finance') || lowerLabel.includes('market')) {
+    return 'News';
+  }
+  
+  // Entertainment mapping
+  if (lowerLabel.includes('entertainment') || lowerLabel.includes('movie') ||
+      lowerLabel.includes('music') || lowerLabel.includes('television') ||
+      lowerLabel.includes('celebrity') || lowerLabel.includes('film') ||
+      lowerLabel.includes('gaming') || lowerLabel.includes('art') ||
+      lowerLabel.includes('culture') || lowerLabel.includes('media')) {
+    return 'Entertainment';
+  }
+  
+  // Funny/Humor mapping
+  if (lowerLabel.includes('humor') || lowerLabel.includes('comedy') ||
+      lowerLabel.includes('joke') || lowerLabel.includes('meme') ||
+      lowerLabel.includes('funny') || lowerLabel.includes('satire')) {
+    return 'Funny';
+  }
+  
+  return null; // Unmapped categories
+};
 
-
+// Map news category codes to our categories
+const mapNewsCategory = (categoryCode) => {
+  const code = categoryCode.toLowerCase();
+  
+  // Sports codes
+  if (code.includes('15') || code.includes('sport')) {
+    return 'Sports';
+  }
+  
+  // Politics/News codes (11-14, 02)
+  if (code.includes('11') || code.includes('12') || code.includes('13') || 
+      code.includes('14') || code.includes('02') || code.includes('politic') ||
+      code.includes('government') || code.includes('economic')) {
+    return 'News';
+  }
+  
+  // Entertainment codes (01, 08)
+  if (code.includes('01') || code.includes('08') || code.includes('entertainment') ||
+      code.includes('lifestyle') || code.includes('art')) {
+    return 'Entertainment';
+  }
+  
+  return null;
+};
 
 const handler = async (req, res) => {
   if (req.method === 'OPTIONS') {
@@ -310,6 +380,7 @@ const handler = async (req, res) => {
         categories: null
       };
 
+      // Send notifications
       const notifications = [];
       if (username) {
         notifications.push(sendPostNotificationsToFollowers(conn, username, postId, message, photo));
@@ -321,8 +392,9 @@ const handler = async (req, res) => {
         notifications.push(sendReplyNotification(conn, username, replyToData.username, postId, message));
       }
 
-            await Promise.allSettled(notifications);
+      await Promise.allSettled(notifications);
 
+      // Classify post content using TextRazor
       const categories = await classifyPostContent(message, photo);
       const finalCategories = categories ? JSON.stringify(categories) : '[]';
 
@@ -332,6 +404,7 @@ const handler = async (req, res) => {
           [finalCategories, postId]
         );
         newPost.categories = JSON.parse(finalCategories);
+        console.log(`Post ${postId} categorized as:`, newPost.categories);
       } catch (updateError) {
         console.error('Failed to update post with categories:', updateError);
         newPost.categories = [];
