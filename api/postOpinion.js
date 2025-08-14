@@ -319,29 +319,26 @@ const handler = async (req, res) => {
         notifications.push(sendReplyNotification(conn, username, replyToData.username, postId, message));
       }
 
-      await Promise.allSettled(notifications);
+            await Promise.allSettled(notifications);
+
+      const categories = await classifyPostContent(message, photo);
+      const finalCategories = categories ? JSON.stringify(categories) : '[]';
+
+      try {
+        await conn.execute(
+          'UPDATE posts SET categories = ? WHERE _id = ?',
+          [finalCategories, postId]
+        );
+        newPost.categories = JSON.parse(finalCategories);
+      } catch (updateError) {
+        console.error('Failed to update post with categories:', updateError);
+        newPost.categories = [];
+      }
+
       await conn.commit();
-      
-      classifyPostContent(message, photo).then(async (categories) => {
-        if (categories) {
-          try {
-            const updateConn = await promisePool.getConnection();
-            await updateConn.execute(
-              'UPDATE posts SET categories = ? WHERE _id = ?',
-              [JSON.stringify(categories), postId]
-            );
-            updateConn.release();
-            
-          } catch (error) {
-            console.error('Failed to update post with categories:', error);
-          }
-        }
-      }).catch(error => {
-        console.error('Classification failed for post', postId, ':', error);
-      });
-      
+
       return res.status(201).json(newPost);
-      
+
     } catch (error) {
       await conn.rollback();
       console.error('Post creation error:', error);
