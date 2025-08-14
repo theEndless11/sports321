@@ -118,207 +118,212 @@ const handler = async (req, res) => {
 
   setCorsHeaders(req, res);
 
-  if (req.method === 'POST') {
-    const { message, username, sessionId, photo, profilePic, tags, replyTo } = req.body;
-
-    if (!username || !sessionId) {
-      return res.status(400).json({ message: 'Username and sessionId are required' });
-    }
-
-    if (!message && !photo) {
-      return res.status(400).json({ message: 'Post content cannot be empty' });
-    }
-
-    const conn = await promisePool.getConnection();
-
-    try {
-      await conn.beginTransaction();
-
-      let profilePicture = 'https://latestnewsandaffairs.site/public/pfp1.jpg';
-
-      const [userResult] = await conn.execute(
-        'SELECT profile_picture FROM users WHERE username = ? LIMIT 1',
-        [username]
-      );
-
-      if (userResult.length && userResult[0].profile_picture) {
-        profilePicture = userResult[0].profile_picture;
-      }
-
-      const extractedTags = tags || (
-        message ? [...new Set(message.match(/@(\w+)/g)?.map(tag => tag.slice(1)) || [])] : []
-      );
-
-      let replyToData = null;
-
-      if (replyTo?.postId) {
-        const [replyPost] = await conn.execute(
-          'SELECT _id, username, message, photo, timestamp FROM posts WHERE _id = ?',
-          [replyTo.postId]
-        );
-
-        if (!replyPost.length) {
-          await conn.rollback();
-          return res.status(400).json({ message: 'Replied-to post not found' });
-        }
-
-        const rp = replyPost[0];
-        replyToData = {
-          postId: rp._id,
-          username: rp.username,
-          message: rp.message,
-          photo: rp.photo,
-          timestamp: rp.timestamp
-        };
-      }
-
-      const [result] = await conn.execute(
-        `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, tags, replyTo)
-         VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
-        [
-          message || '',
-          username,
-          sessionId,
-          '[]',
-          '[]',
-          '[]',
-          photo || null,
-          JSON.stringify(extractedTags),
-          replyToData ? JSON.stringify(replyToData) : null
-        ]
-      );
-
-      const postId = result.insertId;
-
-      const newPost = {
-        _id: postId,
-        message: message || '',
-        timestamp: new Date(),
-        username,
-        likes: 0,
-        dislikes: 0,
-        likedBy: [],
-        dislikedBy: [],
-        comments: [],
-        photo: photo || null,
-        profilePicture,
-        tags: extractedTags,
-        replyTo: replyToData
-      };
-
-      const notifications = [];
-
-      if (username) {
-        notifications.push(sendPostNotificationsToFollowers(conn, username, postId, message, photo));
-      }
-
-      if (extractedTags.length) {
-        notifications.push(sendTagNotifications(conn, username, extractedTags, postId, message));
-      }
-
-      if (replyToData?.username && replyToData.username !== username) {
-        notifications.push(sendReplyNotification(conn, username, replyToData.username, postId, message));
-      }
-
-      await Promise.allSettled(notifications);
-
-      await conn.commit();
-
-      try {
-        await publishToAbly('newOpinion', newPost);
-      } catch (_) {}
-
-      return res.status(201).json(newPost);
-
-    } catch (error) {
-      await conn.rollback();
-      return res.status(500).json({ message: 'Error saving post', error: error.message });
-    } finally {
-      conn.release();
-    }
+// Add this function to handle text classification
+async function classifyPostContent(message, photo) {
+  if (!message || message.trim().length < 10) {
+    return null; // Skip classification for very short posts
   }
 
-    // PUT/PATCH: Handle likes/dislikes
-    if (req.method === 'PUT' || req.method === 'PATCH') {
-        const { postId, action, username } = req.body;
-      
-        if (!postId || !action || !username) {
-            return res.status(400).json({ message: 'Post ID, action, and username are required' });
-        }
+  try {
+    const response = await fetch(`https://api.uclassify.com/v1/uClassify/Topics/classify/?readkey=${process.env.UCLASSIFY_READ_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        texts: [message]
+      })
+    });
 
-        try {
-            // Get the post from MySQL
-            const [postRows] = await promisePool.execute('SELECT * FROM posts WHERE _id = ?', [postId]);
-            const post = postRows[0];
-
-            if (!post) {
-                return res.status(404).json({ message: 'Post not found' });
-            }
-
-            let updatedLikes = post.likes;
-            let updatedDislikes = post.dislikes;
-            let updatedLikedBy = JSON.parse(post.likedBy);
-            let updatedDislikedBy = JSON.parse(post.dislikedBy);
-
-            // Handle the 'like' action
-            if (action === 'like') {
-                if (updatedLikedBy.includes(username)) {
-                    return res.status(400).json({ message: 'You have already liked this post' });
-                }
-                if (updatedDislikedBy.includes(username)) {
-                    updatedDislikes -= 1;
-                    updatedDislikedBy = updatedDislikedBy.filter(user => user !== username);
-                }
-                updatedLikes += 1;
-                updatedLikedBy.push(username);
-            }
-
-            // Handle the 'dislike' action
-            if (action === 'dislike') {
-                if (updatedDislikedBy.includes(username)) {
-                    return res.status(400).json({ message: 'You have already disliked this post' });
-                }
-                if (updatedLikedBy.includes(username)) {
-                    updatedLikes -= 1;
-                    updatedLikedBy = updatedLikedBy.filter(user => user !== username);
-                }
-                updatedDislikes += 1;
-                updatedDislikedBy.push(username);
-            }
-
-            // Update the post in MySQL
-            await promisePool.execute(
-                'UPDATE posts SET likes = ?, dislikes = ?, likedBy = ?, dislikedBy = ? WHERE _id = ?',
-                [updatedLikes, updatedDislikes, JSON.stringify(updatedLikedBy), JSON.stringify(updatedDislikedBy), postId]
-            );
-
-            const updatedPost = {
-                _id: postId,
-                message: post.message,
-                timestamp: post.timestamp,
-                username: post.username,
-                likes: updatedLikes,
-                dislikes: updatedDislikes,
-                comments: JSON.parse(post.comments),
-                photo: post.photo,
-                profilePicture: post.profilePicture,
-               tags: JSON.parse(post.tags || '[]'),
-                replyTo: JSON.parse(post.replyTo || 'null')
-            };
-
-            try {
-                await publishToAbly('updateOpinion', updatedPost);
-            } catch (error) {
-                console.error('Error publishing to Ably:', error);
-            }
-
-            return res.status(200).json(updatedPost);
-        } catch (error) {
-            console.error('Error updating post:', error);
-            return res.status(500).json({ message: 'Error updating post', error });
-        }
+    if (!response.ok) {
+      console.error('uClassify API error:', response.status);
+      return null;
     }
 
+    const data = await response.json();
+    const classification = data[0]?.classification;
+    
+    if (!classification) return null;
+
+    // Map uClassify categories to your custom categories
+    const categoryMapping = {
+      // Sports mappings
+      'sports': 'Sports',
+      'recreation': 'Sports', 
+      'health': 'Sports',
+      
+      // News mappings
+      'politics': 'News',
+      'society': 'News',
+      'law': 'News',
+      'business': 'News',
+      'economics': 'News',
+      
+      // Funny mappings  
+      'humor': 'Funny',
+      'entertainment': 'Entertainment',
+      
+      // Entertainment mappings
+      'arts': 'Entertainment',
+      'games': 'Entertainment',
+      'music': 'Entertainment',
+      'movies': 'Entertainment',
+      'television': 'Entertainment',
+      'culture': 'Entertainment'
+    };
+
+    // Convert to your 4 categories
+    const mappedCategories = {};
+    
+    Object.entries(classification).forEach(([category, confidence]) => {
+      const mappedCategory = categoryMapping[category.toLowerCase()];
+      if (mappedCategory && confidence > 0.1) {
+        mappedCategories[mappedCategory] = (mappedCategories[mappedCategory] || 0) + confidence;
+      }
+    });
+
+    // Get top categories with confidence > 0.15
+    const topCategories = Object.entries(mappedCategories)
+      .filter(([_, confidence]) => confidence > 0.15)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 2) // Max 2 categories per post
+      .map(([category, confidence]) => ({
+        category,
+        confidence: parseFloat(confidence.toFixed(3))
+      }));
+
+    return topCategories.length > 0 ? topCategories : null;
+
+  } catch (error) {
+    console.error('Classification error:', error);
+    return null; // Don't fail post creation if classification fails
+  }
+}
+
+if (req.method === 'POST') {
+  const { message, username, sessionId, photo, profilePic, tags, replyTo } = req.body;
+  if (!username || !sessionId) {
+    return res.status(400).json({ message: 'Username and sessionId are required' });
+  }
+  if (!message && !photo) {
+    return res.status(400).json({ message: 'Post content cannot be empty' });
+  }
+  const conn = await promisePool.getConnection();
+  try {
+    await conn.beginTransaction();
+    let profilePicture = 'https://latestnewsandaffairs.site/public/pfp1.jpg';
+    const [userResult] = await conn.execute(
+      'SELECT profile_picture FROM users WHERE username = ? LIMIT 1',
+      [username]
+    );
+    if (userResult.length && userResult[0].profile_picture) {
+      profilePicture = userResult[0].profile_picture;
+    }
+    const extractedTags = tags || (
+      message ? [...new Set(message.match(/@(\w+)/g)?.map(tag => tag.slice(1)) || [])] : []
+    );
+    let replyToData = null;
+    if (replyTo?.postId) {
+      const [replyPost] = await conn.execute(
+        'SELECT _id, username, message, photo, timestamp FROM posts WHERE _id = ?',
+        [replyTo.postId]
+      );
+      if (!replyPost.length) {
+        await conn.rollback();
+        return res.status(400).json({ message: 'Replied-to post not found' });
+      }
+      const rp = replyPost[0];
+      replyToData = {
+        postId: rp._id,
+        username: rp.username,
+        message: rp.message,
+        photo: rp.photo,
+        timestamp: rp.timestamp
+      };
+    }
+    const [result] = await conn.execute(
+      `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, tags, replyTo, categories)
+       VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        message || '',
+        username,
+        sessionId,
+        '[]',
+        '[]',
+        '[]',
+        photo || null,
+        JSON.stringify(extractedTags),
+        replyToData ? JSON.stringify(replyToData) : null,
+        null
+      ]
+    );
+    const postId = result.insertId;
+    const newPost = {
+      _id: postId,
+      message: message || '',
+      timestamp: new Date(),
+      username,
+      likes: 0,
+      dislikes: 0,
+      likedBy: [],
+      dislikedBy: [],
+      comments: [],
+      photo: photo || null,
+      profilePicture,
+      tags: extractedTags,
+      replyTo: replyToData,
+      categories: null
+    };
+    const notifications = [];
+    if (username) {
+      notifications.push(sendPostNotificationsToFollowers(conn, username, postId, message, photo));
+    }
+    if (extractedTags.length) {
+      notifications.push(sendTagNotifications(conn, username, extractedTags, postId, message));
+    }
+    if (replyToData?.username && replyToData.username !== username) {
+      notifications.push(sendReplyNotification(conn, username, replyToData.username, postId, message));
+    }
+    await Promise.allSettled(notifications);
+    await conn.commit();
+    try {
+      await publishToAbly('newOpinion', newPost);
+    } catch (_) {}
+    
+    // Background classification - don't wait for it
+    classifyPostContent(message, photo).then(async (categories) => {
+      if (categories) {
+        try {
+          const updateConn = await promisePool.getConnection();
+          await updateConn.execute(
+            'UPDATE posts SET categories = ? WHERE _id = ?',
+            [JSON.stringify(categories), postId]
+          );
+          updateConn.release();
+          
+          try {
+            await publishToAbly('postUpdated', { 
+              _id: postId, 
+              categories 
+            });
+          } catch (_) {}
+          
+        } catch (error) {
+          console.error('Failed to update post with categories:', error);
+        }
+      }
+    }).catch(error => {
+      console.error('Classification failed for post', postId, ':', error);
+    });
+    
+    return res.status(201).json(newPost);
+  } catch (error) {
+    await conn.rollback();
+    return res.status(500).json({ message: 'Error saving post', error: error.message });
+  } finally {
+    conn.release();
+  }
+}
     // Handle other methods
     return res.status(405).json({ message: 'Method Not Allowed' });
 };
