@@ -134,7 +134,7 @@ const classifyPostContent = async (message, photo) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Token TQoEnD7yLfCM' // ✅ Correct usage
+        'Authorization': 'Token m1vAIGKPT6Op' // ✅ Correct Read Key
       },
       body: JSON.stringify({
         texts: [message]
