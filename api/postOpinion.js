@@ -120,11 +120,14 @@ const sendReplyNotification = async (conn, replier, originalAuthor, postId, mess
 
 const classifyPostContent = async (message, photo) => {
   if (!message || message.trim().length < 10) {
+    console.log('Message too short for classification:', message?.length);
     return null;
   }
 
   try {
-    const response = await fetch(`https://api.uclassify.com/v1/uClassify/Topics/classify/?readkey=${process.env.UCLASSIFY_READ_KEY}`, {
+    console.log('Starting classification for message:', message.substring(0, 50) + '...');
+    
+    const response = await fetch(`https://api.uclassify.com/v1/uClassify/Topics/classify/?readkey=m1vAIGKPT6Op`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -135,14 +138,19 @@ const classifyPostContent = async (message, photo) => {
     });
 
     if (!response.ok) {
-      console.error('uClassify API error:', response.status);
+      console.error('uClassify API error:', response.status, await response.text());
       return null;
     }
 
     const data = await response.json();
+    console.log('uClassify response:', JSON.stringify(data, null, 2));
+    
     const classification = data[0]?.classification;
     
-    if (!classification) return null;
+    if (!classification) {
+      console.log('No classification data received');
+      return null;
+    }
 
     const categoryMapping = {
       'sports': 'Sports',
@@ -172,6 +180,8 @@ const classifyPostContent = async (message, photo) => {
       }
     });
 
+    console.log('Mapped categories:', mappedCategories);
+
     const topCategories = Object.entries(mappedCategories)
       .filter(([_, confidence]) => confidence > 0.15)
       .sort(([,a], [,b]) => b - a)
@@ -181,6 +191,7 @@ const classifyPostContent = async (message, photo) => {
         confidence: parseFloat(confidence.toFixed(3))
       }));
 
+    console.log('Final categories:', topCategories);
     return topCategories.length > 0 ? topCategories : null;
 
   } catch (error) {
@@ -188,7 +199,6 @@ const classifyPostContent = async (message, photo) => {
     return null;
   }
 };
-
 
 
 const handler = async (req, res) => {
