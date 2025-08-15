@@ -130,7 +130,7 @@ const classifyPostContent = async (message, photo) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
-    const response = await fetch('https://text-fmrm.onrender.com/classify', {
+    const response = await fetch('https://class-vmoy.onrender.com/classify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
