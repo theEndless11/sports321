@@ -130,7 +130,7 @@ const classifyPostContent = async (message, photo) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
-    const response = await fetch('https://class-vmoy.onrender.com/classify', {
+    const response = await fetch('https://text-fmrm.onrender.com/classify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -149,13 +149,11 @@ const classifyPostContent = async (message, photo) => {
     const data = await response.json();
     console.log('Classification completed successfully:', data);
     
-    // Format the response to match your database structure
-    const categories = [{
-      category: capitalizeCategory(data.label)
-    }];
+    // Format the response to match your database structure - just store the category name
+    const category = capitalizeCategory(data.label);
 
-    console.log('Final categories:', categories);
-    return categories;
+    console.log('Final category:', category);
+    return category;
 
   } catch (error) {
     if (error.name === 'AbortError') {
@@ -170,7 +168,7 @@ const classifyPostContent = async (message, photo) => {
 // Helper function to capitalize category names properly
 const capitalizeCategory = (category) => {
   const categoryMap = {
-    'music': 'Music',
+    'story_rant': 'Story/Rant',
     'sports': 'Sports',
     'entertainment': 'Entertainment',
     'news': 'News'
@@ -289,19 +287,19 @@ const handler = async (req, res) => {
       await Promise.allSettled(notifications);
 
       // Classify post content using your custom FastAPI model
-      const categories = await classifyPostContent(message, photo);
-      const finalCategories = categories ? JSON.stringify(categories) : '[]';
+      const category = await classifyPostContent(message, photo);
+      const finalCategory = category || null;
 
       try {
         await conn.execute(
           'UPDATE posts SET categories = ? WHERE _id = ?',
-          [finalCategories, postId]
+          [finalCategory, postId]
         );
-        newPost.categories = JSON.parse(finalCategories);
+        newPost.categories = finalCategory;
         console.log(`Post ${postId} categorized as:`, newPost.categories);
       } catch (updateError) {
         console.error('Failed to update post with categories:', updateError);
-        newPost.categories = [];
+        newPost.categories = null;
       }
 
       await conn.commit();
