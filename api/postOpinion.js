@@ -237,7 +237,7 @@ const handler = async (req, res) => {
       }
 
       const [result] = await conn.execute(
-        `INSERT INTO posts (message, timestamp, username, sessionId, likes, likedBy, photo, tags, replyTo, categories)
+        `INSERT INTO posts (message, timestamp, username, sessionId, likes, comments,likedBy, photo, tags, replyTo, categories)
          VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
         [
           message || '',
@@ -261,9 +261,7 @@ const handler = async (req, res) => {
         timestamp: new Date(),
         username,
         likes: 0,
-        dislikes: 0,
         likedBy: [],
-        dislikedBy: [],
         comments: [],
         photo: photo || null,
         profilePicture,
