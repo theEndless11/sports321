@@ -488,7 +488,8 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
       timestamp: p.timestamp,
       username: p.username,
       likes: p.likes,
-      likedBy: p.likedBy ? (typeof p.likedBy === 'string' ? JSON.parse(p.likedBy) : p.likedBy) || [],
+      likedBy: (p.likedBy && typeof p.likedBy === 'string') ? JSON.parse(p.likedBy) : (p.likedBy || []),
+
       commentCount, // ✅ Include total comment + reply count for engagement
       photo: p.photo?.startsWith('http') || p.photo?.startsWith('data:image')
         ? p.photo
@@ -500,5 +501,6 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     };
   });
 }
+
 
 
