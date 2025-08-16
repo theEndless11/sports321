@@ -388,10 +388,19 @@ async function handleRegularPostsFetch(query, res, defaultPfp) {
   }
 
   // Add category filtering
-  if (sort && ['story_rant', 'sports', 'entertainment', 'news'].includes(sort)) {
-    conditions.push('categories = ?');
-    params.push(sort);
-  }
+  // Add category filtering (map frontend keys to database values)
+if (sort && ['story_rant', 'sports', 'entertainment', 'news'].includes(sort)) {
+  const categoryMap = {
+    'story_rant': 'Story/Rant',
+    'sports': 'Sports',
+    'entertainment': 'Entertainment',
+    'news': 'News'
+  };
+  
+  console.log('🔍 Filtering for category:', sort, '-> DB value:', categoryMap[sort]);
+  conditions.push('categories = ?');
+  params.push(categoryMap[sort]); // Use the formatted value stored in DB
+}
 
   // Add WHERE clause if we have conditions
   if (conditions.length > 0) {
@@ -468,6 +477,7 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     // Removed: hearts, dislikes, dislikedBy, full comments data, replyTo, sessionId
   }));
 }
+
 
 
 
