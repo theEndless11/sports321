@@ -237,7 +237,7 @@ const handler = async (req, res) => {
       }
 
       const [result] = await conn.execute(
-        `INSERT INTO posts (message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo, tags, replyTo, categories)
+        `INSERT INTO posts (message, timestamp, username, sessionId, likes, likedBy, photo, tags, replyTo, categories)
          VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
         [
           message || '',
