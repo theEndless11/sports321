@@ -97,78 +97,127 @@ const handlePostInteraction = async (req, res) => {
 
     let shouldUpdateDB = false;
 
-    if (action === 'like') {
-      shouldUpdateDB = handleLike(post, username);
+   if (action === 'like') {
+      shouldUpdatePost = handleLike(post, username);
+    } 
+    
+    else if (action === 'heart comment') {
+      // Check if comment exists
+      const [comments] = await promisePool.execute(
+        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND is_deleted = FALSE',
+        [commentId, postId]
+      );
+      
+      if (comments.length === 0) {
+        return res.status(404).json({ message: 'Comment not found' });
+      }
 
-    } else if (action === 'heart comment') {
-      const commentObj = post.comments.find(c => String(c.commentId) === String(commentId));
-      if (!commentObj) return res.status(404).json({ message: 'Comment not found' });
+      // Check if user already hearted this comment
+      const [existingHeart] = await promisePool.execute(
+        'SELECT id FROM comment_hearts WHERE comment_id = ? AND username = ?',
+        [commentId, username]
+      );
 
-      commentObj.heartedBy = commentObj.heartedBy || [];
-      commentObj.hearts = commentObj.hearts || 0;
-      shouldUpdateDB = handleHeart(commentObj, username);
+      if (existingHeart.length > 0) {
+        // Remove heart
+        await promisePool.execute(
+          'DELETE FROM comment_hearts WHERE comment_id = ? AND username = ?',
+          [commentId, username]
+        );
+      } else {
+        // Add heart
+        await promisePool.execute(
+          'INSERT INTO comment_hearts (comment_id, username) VALUES (?, ?)',
+          [commentId, username]
+        );
+      }
+    } 
+    
+    else if (action === 'reply') {
+      if (!reply || !reply.trim()) {
+        return res.status(400).json({ message: 'Reply cannot be empty' });
+      }
+      
+      // Check if parent comment exists
+      const [parentComments] = await promisePool.execute(
+        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND is_deleted = FALSE',
+        [commentId, postId]
+      );
+      
+      if (parentComments.length === 0) {
+        return res.status(404).json({ message: 'Parent comment not found' });
+      }
 
-    } else if (action === 'reply') {
-      if (!reply || !reply.trim()) return res.status(400).json({ message: 'Reply cannot be empty' });
+      // Insert reply as a comment with parent_comment_id
+      const newReplyId = replyId || uuidv4();
+      await promisePool.execute(
+        'INSERT INTO comments (comment_id, post_id, parent_comment_id, username, comment_text) VALUES (?, ?, ?, ?, ?)',
+        [newReplyId, postId, commentId, username, reply]
+      );
+    } 
+    
+    else if (action === 'heart reply') {
+      // Check if reply exists (reply is a comment with parent_comment_id)
+      const [replies] = await promisePool.execute(
+        'SELECT comment_id FROM comments WHERE comment_id = ? AND parent_comment_id = ? AND is_deleted = FALSE',
+        [replyId, commentId]
+      );
+      
+      if (replies.length === 0) {
+        return res.status(404).json({ message: 'Reply not found' });
+      }
 
-      const commentObj = post.comments.find(c => String(c.commentId) === String(commentId));
-      if (!commentObj) return res.status(404).json({ message: 'Comment not found' });
+      // Check if user already hearted this reply
+      const [existingHeart] = await promisePool.execute(
+        'SELECT id FROM comment_hearts WHERE comment_id = ? AND username = ?',
+        [replyId, username]
+      );
 
-      commentObj.replies = commentObj.replies || [];
-      commentObj.replies.push({
-        replyId: uuidv4(),
-        username,
-        reply,
-        timestamp: new Date(),
-        hearts: 0,
-        heartedBy: []
-      });
-      shouldUpdateDB = true;
-
-    } else if (action === 'heart reply') {
-      const commentObj = post.comments.find(c => String(c.commentId) === String(commentId));
-      if (!commentObj) return res.status(404).json({ message: 'Comment not found' });
-
-      commentObj.replies = commentObj.replies || [];
-      const replyObj = commentObj.replies.find(r => String(r.replyId) === String(replyId));
-      if (!replyObj) return res.status(404).json({ message: 'Reply not found' });
-
-      replyObj.heartedBy = replyObj.heartedBy || [];
-      replyObj.hearts = replyObj.hearts || 0;
-      shouldUpdateDB = handleHeart(replyObj, username);
-
-    } else if (action === 'comment') {
-      if (!comment || !comment.trim()) return res.status(400).json({ message: 'Comment cannot be empty' });
-
-      post.comments.push({
-        commentId: commentId || uuidv4(),
-        username,
-        comment,
-        timestamp: new Date(),
-        hearts: 0,
-        heartedBy: [],
-        replies: []
-      });
-      shouldUpdateDB = true;
-
-    } else {
+      if (existingHeart.length > 0) {
+        // Remove heart
+        await promisePool.execute(
+          'DELETE FROM comment_hearts WHERE comment_id = ? AND username = ?',
+          [replyId, username]
+        );
+      } else {
+        // Add heart
+        await promisePool.execute(
+          'INSERT INTO comment_hearts (comment_id, username) VALUES (?, ?)',
+          [replyId, username]
+        );
+      }
+    } 
+    
+    else if (action === 'comment') {
+      if (!comment || !comment.trim()) {
+        return res.status(400).json({ message: 'Comment cannot be empty' });
+      }
+      
+      const newCommentId = commentId || uuidv4();
+      await promisePool.execute(
+        'INSERT INTO comments (comment_id, post_id, username, comment_text) VALUES (?, ?, ?, ?)',
+        [newCommentId, postId, username, comment]
+      );
+    } 
+    
+    else {
       return res.status(400).json({ message: 'Invalid action' });
     }
 
-    if (shouldUpdateDB) {
+    // Update post if likes changed
+    if (shouldUpdatePost) {
       await promisePool.execute(
-        'UPDATE posts SET likes = ?, likedBy = ?, comments = ? WHERE _id = ?',
-        [
-          post.likes,
-          JSON.stringify(post.likedBy),
-          JSON.stringify(post.comments),
-          postId
-        ]
+        'UPDATE posts SET likes = ?, likedBy = ? WHERE _id = ?',
+        [post.likes, JSON.stringify(post.likedBy), postId]
       );
     }
 
-    return res.status(200).json(post);
+    // Return the updated post with comments
+    const updatedPost = await getPostWithComments(postId);
+    return res.status(200).json(updatedPost);
+
   } catch (error) {
+    console.error('Error updating post:', error);
     return res.status(500).json({ message: 'Error updating post', error: error.message });
   }
 };
@@ -197,6 +246,7 @@ module.exports = async function handler(req, res) {
 
   return res.status(405).json({ message: 'Method Not Allowed' });
 };
+
 
 
 
