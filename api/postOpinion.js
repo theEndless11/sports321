@@ -235,10 +235,10 @@ const handler = async (req, res) => {
           timestamp: rp.timestamp
         };
       }
-
-     const [result] = await conn.execute(
-  `INSERT INTO posts (message, timestamp, username, sessionId, likes, comments, likedBy, photo, tags, replyTo, categories)
-   VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?)`,
+const [result] = await conn.execute(
+  `INSERT INTO posts (
+     message, timestamp, username, sessionId, likes, likedBy, photo, tags, replyTo, categories
+   ) VALUES (?, NOW(), ?, ?, 0, ?, ?, ?, ?, ?)`,
   [
     message || '',
     username,
@@ -250,7 +250,6 @@ const handler = async (req, res) => {
     null // categories
   ]
 );
-
       const postId = result.insertId;
       
       const newPost = {
