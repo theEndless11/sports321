@@ -431,21 +431,54 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
   return posts.map(p => {
     // Calculate comment count efficiently without parsing full comment data
     let commentCount = 0;
-    if (p.comments) {
+    
+    // Debug: Log the raw comment data
+    if (p._id === posts[0]?._id) { // Only log first post to avoid spam
+      console.log(`🔍 Debug post ${p._id}:`);
+      console.log('- Raw comments:', p.comments);
+      console.log('- Comments type:', typeof p.comments);
+      console.log('- Comments truthy:', !!p.comments);
+      console.log('- Comments length:', p.comments?.length);
+    }
+    
+    if (p.comments && p.comments.trim() !== '' && p.comments !== '[]') {
       try {
-        const comments = JSON.parse(p.comments);
-        commentCount = Array.isArray(comments) ? comments.length : 0;
+        // Handle both string and already parsed comments
+        const comments = typeof p.comments === 'string' ? JSON.parse(p.comments) : p.comments;
         
-        // Also count replies within comments for total engagement
-        if (commentCount > 0) {
-          comments.forEach(comment => {
-            if (comment.replies && Array.isArray(comment.replies)) {
+        if (Array.isArray(comments) && comments.length > 0) {
+          // Count main comments
+          commentCount = comments.length;
+          
+          // Also count replies within comments for total engagement
+          comments.forEach((comment, index) => {
+            if (comment && comment.replies && Array.isArray(comment.replies)) {
               commentCount += comment.replies.length;
+              
+              // Debug first post's comments
+              if (p._id === posts[0]?._id) {
+                console.log(`  - Comment ${index + 1}: "${comment.comment}" + ${comment.replies.length} replies`);
+              }
             }
           });
+          
+          // Debug log for posts with comments
+          if (p._id === posts[0]?._id) {
+            console.log(`✅ Post ${p._id}: ${commentCount} total comments/replies`);
+          }
+        } else {
+          if (p._id === posts[0]?._id) {
+            console.log(`ℹ️ Post ${p._id}: Comments array is empty or invalid`);
+          }
         }
       } catch (e) {
+        console.error(`❌ Error parsing comments for post ${p._id}:`, e);
+        console.error('Raw comment data that failed:', p.comments);
         commentCount = 0;
+      }
+    } else {
+      if (p._id === posts[0]?._id) {
+        console.log(`ℹ️ Post ${p._id}: No comments or empty comments field`);
       }
     }
 
@@ -455,16 +488,15 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
       timestamp: p.timestamp,
       username: p.username,
       likes: p.likes,
-      likedBy: p.likedBy ? JSON.parse(p.likedBy) : [], // Keep for like button state
+      likedBy: p.likedBy ? (typeof p.likedBy === 'string' ? JSON.parse(p.likedBy) : p.likedBy) || [],
       commentCount, // ✅ Include total comment + reply count for engagement
       photo: p.photo?.startsWith('http') || p.photo?.startsWith('data:image')
         ? p.photo
         : p.photo ? `data:image/jpeg;base64,${p.photo.toString('base64')}` : null,
       profilePicture: usersMap[p.username.toLowerCase()] || defaultPfp,
-      tags: p.tags ? JSON.parse(p.tags) : [],
-      feedType: p.feedType || 'regular', // Keep for debugging/analytics
-      views_count: p.views_count || 0 // Include view count
-      // Removed: hearts, dislikes, dislikedBy, full comments data, replyTo, sessionId
+      tags: p.tags ? (typeof p.tags === 'string' ? JSON.parse(p.tags) : p.tags) || [] : [],
+      feedType: p.feedType || 'regular',
+      views_count: p.views_count || 0
     };
   });
 }
