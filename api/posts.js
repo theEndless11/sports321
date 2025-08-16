@@ -389,7 +389,7 @@ async function handleRegularPostsFetch(query, res, defaultPfp) {
 
   // Add category filtering
   if (sort && ['story_rant', 'sports', 'entertainment', 'news'].includes(sort)) {
-    conditions.push('category = ?');
+    conditions.push('categories = ?');
     params.push(sort);
   }
 
@@ -468,6 +468,7 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     // Removed: hearts, dislikes, dislikedBy, full comments data, replyTo, sessionId
   }));
 }
+
 
 
 
