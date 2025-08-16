@@ -1,4 +1,4 @@
-const { promisePool } = require('../utils/db');
+// === REGULAR POSTS HANDLER ===const { promisePool } = require('../utils/db');
 
 const setCorsHeaders = (res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -18,27 +18,33 @@ module.exports = async function handler(req, res) {
 
   if (req.method === 'GET') {
     const {
-      userId, // Now used for both profile and personalized feed
+      userId, // Used for both profile and personalized feed
       username_like,
       start_timestamp,
       end_timestamp,
       page = 1,
       limit = 10,
-      sort
+      sort,
+      postId // For individual post fetching
     } = req.query;
 
     try {
-      // Handle user profile fetch - when only userId is provided (no other params for filtering/pagination)
+      // Handle user profile fetch - return FULL posts with comments
       if (userId && !username_like && !start_timestamp && !end_timestamp && !sort && page == 1 && limit == 10) {
         return await handleUserProfile(userId, res, defaultPfp);
       }
 
-      // Handle personalized feed - when userId + sort=general (or similar feed params)
+      // Handle user's posts with full details (when username_like matches userId)
+      if (userId && username_like && username_like === userId) {
+        return await handleUserPosts(userId, req.query, res, defaultPfp);
+      }
+
+      // Handle personalized feed - lightweight posts for feed
       if (userId && (sort === 'general' || sort === 'personalized')) {
         return await handlePersonalizedFeed(userId, page, limit, res, defaultPfp);
       }
 
-      // Handle regular posts fetching (categories, trending, etc.)
+      // Handle regular posts fetching - lightweight posts for feed
       return await handleRegularPostsFetch(req.query, res, defaultPfp);
 
     } catch (error) {
@@ -111,7 +117,85 @@ async function handlePersonalizedFeed(userId, page, limit, res, defaultPfp) {
   }
 }
 
-// === REGULAR POSTS HANDLER ===
+// === INDIVIDUAL POST HANDLER (FULL DETAILS) ===
+async function handleIndividualPost(postId, res, defaultPfp) {
+  try {
+    // Get the specific post
+    const [postRows] = await promisePool.execute(
+      'SELECT * FROM posts WHERE _id = ?',
+      [postId]
+    );
+
+    if (postRows.length === 0) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const post = postRows[0];
+
+    // Enrich with full details including comments
+    const enrichedPosts = await enrichPostsWithFullDetails([post], defaultPfp);
+
+    return res.status(200).json({
+      post: enrichedPosts[0],
+      type: 'individual'
+    });
+
+  } catch (error) {
+    console.error('Error fetching individual post:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// === USER POSTS WITH DETAILS HANDLER ===
+async function handleUserPostsWithDetails(userId, query, res, defaultPfp) {
+  const {
+    start_timestamp,
+    end_timestamp,
+    page = 1,
+    limit = 10
+  } = query;
+
+  try {
+    let sql = 'SELECT * FROM posts WHERE username = ?';
+    const params = [userId];
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // Handle date filtering
+    if (start_timestamp && end_timestamp) {
+      sql += ' AND timestamp BETWEEN ? AND ?';
+      params.push(start_timestamp, end_timestamp);
+    }
+
+    sql += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), offset);
+
+    const [posts] = await promisePool.execute(sql, params);
+
+    // Enrich with full details including comments
+    const enrichedPosts = await enrichPostsWithFullDetails(posts, defaultPfp);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) AS count FROM posts WHERE username = ?';
+    const countParams = [userId];
+    
+    if (start_timestamp && end_timestamp) {
+      countQuery += ' AND timestamp BETWEEN ? AND ?';
+      countParams.push(start_timestamp, end_timestamp);
+    }
+
+    const [countResult] = await promisePool.execute(countQuery, countParams);
+
+    return res.status(200).json({
+      posts: enrichedPosts,
+      hasMorePosts: (parseInt(page) * parseInt(limit)) < countResult[0].count,
+      type: 'user_posts_detailed'
+    });
+
+  } catch (error) {
+    console.error('Error fetching user posts with details:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
 async function handleRegularPostsFetch(query, res, defaultPfp) {
   const {
     username_like,
@@ -397,6 +481,159 @@ async function getRegionalPosts(userData, recentlyViewed, count) {
   }
 
   return posts.slice(0, count);
+}
+
+// === POST ENRICHMENT WITH FULL DETAILS (including comments) ===
+async function enrichPostsWithFullDetails(posts, defaultPfp) {
+  if (posts.length === 0) return [];
+
+  // Get unique usernames from posts
+  const usernames = [...new Set(posts.map(p => p.username))];
+  
+  // Get replyTo usernames
+  const replyToUsernames = posts.flatMap(p => {
+    try {
+      const reply = p.replyTo ? JSON.parse(p.replyTo) : null;
+      return reply?.username ? [reply.username] : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const allUsernames = [...new Set([...usernames, ...replyToUsernames])];
+
+  // Get user profile pictures
+  const usersMap = {};
+  if (allUsernames.length > 0) {
+    const userSql = `SELECT username, profile_picture FROM users WHERE username IN (${allUsernames.map(() => '?').join(',')})`;
+    const [users] = await promisePool.execute(userSql, allUsernames);
+
+    users.forEach(u => {
+      usersMap[u.username.toLowerCase()] = u.profile_picture?.startsWith('data:image') || u.profile_picture?.startsWith('http')
+        ? u.profile_picture
+        : u.profile_picture ? `data:image/jpeg;base64,${u.profile_picture}` : defaultPfp;
+    });
+  }
+
+  // Get comments for all posts
+  const postIds = posts.map(p => p._id);
+  let commentsMap = {};
+  
+  if (postIds.length > 0) {
+    // Get all comments (both top-level and replies)
+    const commentSql = `
+      SELECT 
+        c.comment_id,
+        c.post_id,
+        c.parent_comment_id,
+        c.username,
+        c.comment_text,
+        c.created_at,
+        c.hearts_count,
+        c.is_deleted,
+        u.profile_picture
+      FROM comments c
+      LEFT JOIN users u ON c.username = u.username
+      WHERE c.post_id IN (${postIds.map(() => '?').join(',')})
+      ORDER BY c.created_at ASC
+    `;
+    
+    const [allComments] = await promisePool.execute(commentSql, postIds);
+    
+    // Organize comments by post_id
+    postIds.forEach(postId => {
+      commentsMap[postId] = [];
+    });
+    
+    // First pass: add all top-level comments
+    allComments.forEach(comment => {
+      if (!comment.parent_comment_id) {
+        commentsMap[comment.post_id].push({
+          commentId: comment.comment_id,
+          username: comment.username,
+          comment: comment.comment_text,
+          timestamp: comment.created_at,
+          hearts: comment.hearts_count || 0,
+          profilePicture: comment.profile_picture?.startsWith('data:image') || comment.profile_picture?.startsWith('http')
+            ? comment.profile_picture
+            : comment.profile_picture ? `data:image/jpeg;base64,${comment.profile_picture}` : defaultPfp,
+          replies: []
+        });
+      }
+    });
+    
+    // Second pass: add replies to their parent comments
+    allComments.forEach(comment => {
+      if (comment.parent_comment_id) {
+        // Find the parent comment in the appropriate post
+        const postComments = commentsMap[comment.post_id];
+        const parentComment = postComments.find(c => c.commentId === comment.parent_comment_id);
+        
+        if (parentComment) {
+          parentComment.replies.push({
+            commentId: comment.comment_id,
+            username: comment.username,
+            comment: comment.comment_text,
+            timestamp: comment.created_at,
+            hearts: comment.hearts_count || 0,
+            profilePicture: comment.profile_picture?.startsWith('data:image') || comment.profile_picture?.startsWith('http')
+              ? comment.profile_picture
+              : comment.profile_picture ? `data:image/jpeg;base64,${comment.profile_picture}` : defaultPfp
+          });
+        }
+      }
+    });
+  }
+
+  // Build enriched posts with FULL details
+  return posts.map(p => {
+    const comments = commentsMap[p._id] || [];
+
+    const replyToData = p.replyTo ? (() => {
+      try {
+        const parsed = JSON.parse(p.replyTo);
+        if (parsed) {
+          parsed.profilePicture = usersMap[parsed.username?.toLowerCase()] || defaultPfp;
+        }
+        return parsed;
+      } catch {
+        return null;
+      }
+    })() : null;
+
+    return {
+      _id: p._id,
+      message: p.message,
+      timestamp: p.timestamp,
+      username: p.username,
+      sessionId: p.sessionId,
+      likes: p.likes || 0,
+      likedBy: p.likedBy ? (() => {
+        try {
+          return JSON.parse(p.likedBy);
+        } catch {
+          return [];
+        }
+      })() : [],
+      hearts: p.hearts || 0,
+      comments: comments, // FULL comments with replies
+      commentsCount: p.comments_count || 0,
+      photo: p.photo?.startsWith('http') || p.photo?.startsWith('data:image')
+        ? p.photo
+        : p.photo ? `data:image/jpeg;base64,${p.photo.toString('base64')}` : null,
+      profilePicture: usersMap[p.username.toLowerCase()] || defaultPfp,
+      tags: p.tags ? (() => {
+        try {
+          return JSON.parse(p.tags);
+        } catch {
+          return [];
+        }
+      })() : [],
+      replyTo: replyToData,
+      categories: p.categories || null,
+      views_count: p.views_count || 0
+    };
+  });
 }
 
 // === POST ENRICHMENT FOR FEED (LIGHTWEIGHT) ===
