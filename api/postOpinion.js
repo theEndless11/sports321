@@ -236,22 +236,20 @@ const handler = async (req, res) => {
         };
       }
 
-      const [result] = await conn.execute(
-        `INSERT INTO posts (message, timestamp, username, sessionId, likes, comments,likedBy, photo, tags, replyTo, categories)
-         VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          message || '',
-          username,
-          sessionId,
-          '[]',
-          '[]',
-          '[]',
-          photo || null,
-          JSON.stringify(extractedTags),
-          replyToData ? JSON.stringify(replyToData) : null,
-          null
-        ]
-      );
+     const [result] = await conn.execute(
+  `INSERT INTO posts (message, timestamp, username, sessionId, likes, comments, likedBy, photo, tags, replyTo, categories)
+   VALUES (?, NOW(), ?, ?, 0, 0, ?, ?, ?, ?, ?)`,
+  [
+    message || '',
+    username,
+    sessionId,
+    '[]', // likedBy
+    photo || null,
+    JSON.stringify(extractedTags), // tags
+    replyToData ? JSON.stringify(replyToData) : null,
+    null // categories
+  ]
+);
 
       const postId = result.insertId;
       
