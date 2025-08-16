@@ -23,26 +23,25 @@ module.exports = async function handler(req, res) {
       start_timestamp,
       end_timestamp,
       page = 1,
-      limit = 10, // Changed to 10 for lazy loading
+      limit = 10,
       sort,
-      userId // New parameter for personalized feed
+      userId
     } = req.query;
 
-    // Handle user profile fetch (unchanged)
+    // Handle user profile fetch
     if (username && !username_like && !start_timestamp && !end_timestamp && !userId) {
       return await handleUserProfile(username, res);
     }
 
-    // Handle personalized feed
-    if (userId) {
+    // Handle personalized feed (only for 'general' sort or no sort specified)
+    if (userId && (sort === 'general' || !sort)) {
       return await handlePersonalizedFeed(userId, page, limit, res, defaultPfp);
     }
 
-    // Handle regular posts fetching (existing logic)
+    // Handle regular posts fetching with category filtering
     return await handleRegularPostsFetch(req.query, res, defaultPfp);
   }
 };
-
 // === PERSONALIZED FEED ALGORITHM ===
 async function handlePersonalizedFeed(userId, page, limit, res, defaultPfp) {
   try {
@@ -367,7 +366,7 @@ async function handleRegularPostsFetch(query, res, defaultPfp) {
     start_timestamp,
     end_timestamp,
     page = 1,
-    limit = 10, // Updated to 10
+    limit = 10,
     sort
   } = query;
 
@@ -375,21 +374,39 @@ async function handleRegularPostsFetch(query, res, defaultPfp) {
   const params = [];
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
+  // Handle filtering conditions
+  const conditions = [];
+
   if (username_like) {
-    sql += ' WHERE username LIKE ?';
+    conditions.push('username LIKE ?');
     params.push(`%${username_like}%`);
   }
 
   if (start_timestamp && end_timestamp) {
-    sql += params.length ? ' AND' : ' WHERE';
-    sql += ' timestamp BETWEEN ? AND ?';
+    conditions.push('timestamp BETWEEN ? AND ?');
     params.push(start_timestamp, end_timestamp);
   }
 
+  // Add category filtering
+  if (sort && ['story_rant', 'sports', 'entertainment', 'news'].includes(sort)) {
+    conditions.push('category = ?');
+    params.push(sort);
+  }
+
+  // Add WHERE clause if we have conditions
+  if (conditions.length > 0) {
+    sql += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  // Handle sorting
   const sortOptions = {
-    'most-liked': 'likes DESC',
-    'most-comments': 'CHAR_LENGTH(comments) DESC',
-    'newest': 'timestamp DESC'
+    'trending': '(likes + comments_count + IFNULL(hearts, 0)) DESC, timestamp DESC', // Most engagement
+    'newest': 'timestamp DESC',
+    'general': 'timestamp DESC', // Default to newest for general
+    'story_rant': 'timestamp DESC', // Category filtered, sorted by newest
+    'sports': 'timestamp DESC',
+    'entertainment': 'timestamp DESC', 
+    'news': 'timestamp DESC'
   };
 
   sql += ` ORDER BY ${sortOptions[sort] || 'timestamp DESC'} LIMIT ? OFFSET ?`;
@@ -398,13 +415,18 @@ async function handleRegularPostsFetch(query, res, defaultPfp) {
   const [posts] = await promisePool.execute(sql, params);
   const enrichedPosts = await enrichPostsWithUserData(posts, defaultPfp);
 
-  const countQuery = `SELECT COUNT(*) AS count FROM posts${username_like || start_timestamp ? ' WHERE' : ''} ${username_like ? 'username LIKE ?' : ''}${username_like && start_timestamp ? ' AND ' : ''}${start_timestamp ? 'timestamp BETWEEN ? AND ?' : ''}`;
-  const countParams = params.slice(0, params.length - 2);
+  // Update count query to match filtering
+  let countQuery = 'SELECT COUNT(*) AS count FROM posts';
+  if (conditions.length > 0) {
+    countQuery += ' WHERE ' + conditions.join(' AND ');
+  }
+  const countParams = params.slice(0, params.length - 2); // Remove LIMIT and OFFSET params
   const [countResult] = await promisePool.execute(countQuery, countParams);
 
   return res.status(200).json({
     posts: enrichedPosts,
-    hasMorePosts: (page * limit) < countResult[0].count
+    hasMorePosts: (page * limit) < countResult[0].count,
+    filterType: sort === 'general' ? 'general' : (sort || 'general')
   });
 }
 
@@ -446,6 +468,7 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     // Removed: hearts, dislikes, dislikedBy, full comments data, replyTo, sessionId
   }));
 }
+
 
 
 
