@@ -18,24 +18,23 @@ module.exports = async function handler(req, res) {
 
   if (req.method === 'GET') {
     const {
-      username,
+      userId, // Now used for both profile and personalized feed
       username_like,
       start_timestamp,
       end_timestamp,
       page = 1,
       limit = 10,
-      sort,
-      userId
+      sort
     } = req.query;
 
     try {
-      // Handle user profile fetch
-      if (username && !username_like && !start_timestamp && !end_timestamp && !userId) {
-        return await handleUserProfile(username, res, defaultPfp);
+      // Handle user profile fetch - when only userId is provided (no other params for filtering/pagination)
+      if (userId && !username_like && !start_timestamp && !end_timestamp && !sort && page == 1 && limit == 10) {
+        return await handleUserProfile(userId, res, defaultPfp);
       }
 
-      // Handle personalized feed (when userId is provided and sort is 'general' or not specified)
-      if (userId && (sort === 'general' || !sort)) {
+      // Handle personalized feed - when userId + sort=general (or similar feed params)
+      if (userId && (sort === 'general' || sort === 'personalized')) {
         return await handlePersonalizedFeed(userId, page, limit, res, defaultPfp);
       }
 
@@ -52,11 +51,11 @@ module.exports = async function handler(req, res) {
 };
 
 // === USER PROFILE HANDLER ===
-async function handleUserProfile(username, res, defaultPfp) {
+async function handleUserProfile(userId, res, defaultPfp) {
   try {
     const [rows] = await promisePool.execute(
       'SELECT username, profile_picture, Music, description, created_at FROM users WHERE username = ?',
-      [username]
+      [userId]
     );
     
     if (rows.length === 0) {
