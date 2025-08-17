@@ -117,8 +117,9 @@ module.exports = async function handler(req, res) {
                 username: post.username,
                 sessionId: post.sessionId,
                 likes: post.likes,
-               views_count: p.views_count || 0
+               views_count: p.views_count || 0,
                 likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
+                  
                  commentCount: p.comments_count || 0, // ✅ Use the dedicated comments_count column
                 comments: post.comments ? JSON.parse(post.comments || '[]') : [],
                 photo: post.photo 
