@@ -1,7 +1,7 @@
 const { promisePool } = require('../utils/db');
 const { v4: uuidv4 } = require('uuid');
 
-// Set CORS headers
+// CORS headers
 const setCorsHeaders = (res) => {
   res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
@@ -9,7 +9,7 @@ const setCorsHeaders = (res) => {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
 
-// Like/unlike handler
+// Like/unlike logic
 const handleLike = (post, username) => {
   const likedBy = post.likedBy;
   if (likedBy.includes(username)) {
@@ -22,11 +22,11 @@ const handleLike = (post, username) => {
   return true;
 };
 
-// Get updated post with comments
+// Get post with comments
 const getPostWithComments = async (postId) => {
   const [posts] = await promisePool.execute('SELECT * FROM posts WHERE _id = ?', [postId]);
   const [comments] = await promisePool.execute(
-    'SELECT * FROM comments WHERE post_id = ? AND is_deleted = FALSE',
+    'SELECT * FROM comments WHERE post_id = ?',
     [postId]
   );
 
@@ -39,7 +39,7 @@ const getPostWithComments = async (postId) => {
   return post;
 };
 
-// Handle profile updates
+// Profile update logic
 const handleProfileUpdate = async (req, res) => {
   const { username, hobby, description, profilePicture, Music } = req.body;
   if (!username) return res.status(400).json({ message: 'Username is required' });
@@ -76,7 +76,7 @@ const handleProfileUpdate = async (req, res) => {
   }
 };
 
-// Handle post interactions
+// Post interactions
 const handlePostInteraction = async (req, res) => {
   const { postId, username, action, comment, reply, commentId, replyId } = req.body;
 
@@ -100,7 +100,7 @@ const handlePostInteraction = async (req, res) => {
 
     else if (action === 'heart comment') {
       const [comments] = await promisePool.execute(
-        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND is_deleted = FALSE',
+        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ?',
         [commentId, postId]
       );
       if (!comments.length) return res.status(404).json({ message: 'Comment not found' });
@@ -127,7 +127,7 @@ const handlePostInteraction = async (req, res) => {
       if (!reply || !reply.trim()) return res.status(400).json({ message: 'Reply cannot be empty' });
 
       const [parentComments] = await promisePool.execute(
-        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND is_deleted = FALSE',
+        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ?',
         [commentId, postId]
       );
       if (!parentComments.length) return res.status(404).json({ message: 'Parent comment not found' });
@@ -141,7 +141,7 @@ const handlePostInteraction = async (req, res) => {
 
     else if (action === 'heart reply') {
       const [replies] = await promisePool.execute(
-        'SELECT comment_id FROM comments WHERE comment_id = ? AND parent_comment_id = ? AND is_deleted = FALSE',
+        'SELECT comment_id FROM comments WHERE comment_id = ? AND parent_comment_id = ?',
         [replyId, commentId]
       );
       if (!replies.length) return res.status(404).json({ message: 'Reply not found' });
@@ -178,7 +178,7 @@ const handlePostInteraction = async (req, res) => {
       return res.status(400).json({ message: 'Invalid action' });
     }
 
-    // Update post if likes changed
+    // Update likes if needed
     if (shouldUpdatePost) {
       await promisePool.execute(
         'UPDATE posts SET likes = ?, likedBy = ? WHERE _id = ?',
@@ -226,7 +226,6 @@ module.exports = async function handler(req, res) {
 
   return res.status(405).json({ message: 'Method Not Allowed' });
 };
-
 
 
 
