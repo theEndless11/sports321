@@ -106,28 +106,26 @@ module.exports = async function handler(req, res) {
             const userProfilePicture = user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg';
 
             // Fetch posts related to the user
-            const postsQuery = 'SELECT _id, message, timestamp, username, sessionId, likes, likedBy,comments_count, photo FROM posts WHERE username = ?';
-            const [postsResult] = await promisePool.execute(postsQuery, [username]);
+           const postsQuery = 'SELECT _id, message, timestamp, username, sessionId, likes, likedBy, comments_count, views_count, photo FROM posts WHERE username = ?';
+const [postsResult] = await promisePool.execute(postsQuery, [username]);
 
-            // Process posts and format the response
-            const formattedPosts = postsResult.map(post => ({
-                _id: post._id,
-                message: post.message,
-                timestamp: post.timestamp,
-                username: post.username,
-                sessionId: post.sessionId,
-                likes: post.likes,
-               views_count: p.views_count || 0,
-                likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
-                  
-                 commentCount: p.comments_count || 0, // ✅ Use the dedicated comments_count column
-                comments: post.comments ? JSON.parse(post.comments || '[]') : [],
-                photo: post.photo 
-                    ? (post.photo.startsWith('http') || post.photo.startsWith('data:image/') ? post.photo : `data:image/jpeg;base64,${post.photo.toString('base64')}`)
-                    : null,
-                profilePicture: userProfilePicture,
-            }));
-
+// Process posts and format the response
+const formattedPosts = postsResult.map(post => ({
+    _id: post._id,
+    message: post.message,
+    timestamp: post.timestamp,
+    username: post.username,
+    sessionId: post.sessionId,
+    likes: post.likes,
+    views_count: post.views_count || 0,
+    likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
+    commentCount: post.comments_count || 0,
+    comments: post.comments ? JSON.parse(post.comments || '[]') : [],
+    photo: post.photo 
+        ? (post.photo.startsWith('http') || post.photo.startsWith('data:image/') ? post.photo : `data:image/jpeg;base64,${post.photo.toString('base64')}`)
+        : null,
+    profilePicture: userProfilePicture,
+}));
             // Response payload
             const response = {
                 user: {
