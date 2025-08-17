@@ -106,7 +106,7 @@ module.exports = async function handler(req, res) {
             const userProfilePicture = user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg';
 
             // Fetch posts related to the user
-            const postsQuery = 'SELECT _id, message, timestamp, username, sessionId, likes, dislikes, likedBy, dislikedBy, comments, photo FROM posts WHERE username = ?';
+            const postsQuery = 'SELECT _id, message, timestamp, username, sessionId, likes, likedBy,comments_count, photo FROM posts WHERE username = ?';
             const [postsResult] = await promisePool.execute(postsQuery, [username]);
 
             // Process posts and format the response
@@ -117,9 +117,9 @@ module.exports = async function handler(req, res) {
                 username: post.username,
                 sessionId: post.sessionId,
                 likes: post.likes,
-                dislikes: post.dislikes,
+               views_count: p.views_count || 0
                 likedBy: post.likedBy ? JSON.parse(post.likedBy || '[]') : [],
-                dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy || '[]') : [],
+                 commentCount: p.comments_count || 0, // ✅ Use the dedicated comments_count column
                 comments: post.comments ? JSON.parse(post.comments || '[]') : [],
                 photo: post.photo 
                     ? (post.photo.startsWith('http') || post.photo.startsWith('data:image/') ? post.photo : `data:image/jpeg;base64,${post.photo.toString('base64')}`)
