@@ -16,166 +16,6 @@ const setCorsHeaders = (req, res) => {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
 
-const sendPostNotificationsToFollowers = async (conn, username, postId, message, photo) => {
-  try {
-    const [followers] = await conn.execute(`
-      SELECT f.follower AS username
-      FROM follows f
-      WHERE f.following = ? AND f.relationship_status IN ('none', 'accepted') AND f.follower != ?
-    `, [username, username]);
-
-    if (!followers.length) return;
-
-    const postPreview = message
-      ? (message.length > 50 ? message.slice(0, 50) + '...' : message)
-      : (photo ? 'shared a photo' : 'made a post');
-
-    const notificationMessage = `${username} posted: ${postPreview}`;
-    const metadata = JSON.stringify({
-      postId,
-      postType: photo ? 'photo' : 'text',
-      preview: postPreview
-    });
-
-    const values = followers.map(f => [
-      f.username,
-      username,
-      'new_post',
-      notificationMessage,
-      metadata
-    ]);
-
-    const placeholders = values.map(() => '(?, ?, ?, ?, ?)').join(', ');
-    await conn.execute(`
-      INSERT INTO notifications (recipient, sender, type, message, metadata)
-      VALUES ${placeholders}
-    `, values.flat());
-  } catch (error) {
-    console.error('Error sending follower notifications:', error);
-  }
-};
-
-const sendTagNotifications = async (conn, author, taggedUsers, postId, message) => {
-  try {
-    const uniqueTags = [...new Set(taggedUsers.filter(tag => tag !== author))];
-    if (!uniqueTags.length) return;
-
-    const [validUsers] = await conn.execute(
-      `SELECT username FROM users WHERE username IN (${uniqueTags.map(() => '?').join(',')})`,
-      uniqueTags
-    );
-
-    if (!validUsers.length) return;
-
-    const preview = message
-      ? (message.length > 30 ? message.slice(0, 30) + '...' : message)
-      : 'a post';
-
-    const notificationMessage = `${author} mentioned you in ${preview}`;
-    const metadata = JSON.stringify({ postId, mentionType: 'tag' });
-
-    const values = validUsers.map(user => [
-      user.username,
-      author,
-      'tag_mention',
-      notificationMessage,
-      metadata
-    ]);
-
-    const placeholders = values.map(() => '(?, ?, ?, ?, ?)').join(', ');
-    await conn.execute(`
-      INSERT INTO notifications (recipient, sender, type, message, metadata)
-      VALUES ${placeholders}
-    `, values.flat());
-  } catch (error) {
-    console.error('Error sending tag notifications:', error);
-  }
-};
-
-const sendReplyNotification = async (conn, replier, originalAuthor, postId, message) => {
-  try {
-    if (replier === originalAuthor) return;
-
-    const [userExists] = await conn.execute(
-      'SELECT 1 FROM users WHERE username = ? LIMIT 1',
-      [originalAuthor]
-    );
-    if (!userExists.length) return;
-
-    const preview = message
-      ? (message.length > 40 ? message.slice(0, 40) + '...' : message)
-      : 'replied to your post';
-
-    const notificationMessage = `${replier} replied: ${preview}`;
-    const metadata = JSON.stringify({ postId, replyType: 'post_reply' });
-
-    await conn.execute(`
-      INSERT INTO notifications (recipient, sender, type, message, metadata)
-      VALUES (?, ?, ?, ?, ?)
-    `, [originalAuthor, replier, 'post_reply', notificationMessage, metadata]);
-  } catch (error) {
-    console.error('Error sending reply notification:', error);
-  }
-};
-
-const classifyPostContent = async (message, photo) => {
-  if (!message || message.trim().length < 10) {
-    console.log('Message too short for classification:', message?.length);
-    return null;
-  }
-
-  try {
-    console.log('Starting custom model classification for message:', message.substring(0, 50) + '...');
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-    
-    const response = await fetch('https://hydra-yaqp.onrender.com/classify', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ text: message }),
-      signal: controller.signal
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      console.error('Classification API error:', response.status, await response.text());
-      return null;
-    }
-
-    const data = await response.json();
-    console.log('Classification completed successfully:', data);
-    
-    // Format the response to match your database structure - just store the category name
-    const category = capitalizeCategory(data.label);
-
-    console.log('Final category:', category);
-    return category;
-
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      console.error('Classification timeout after 10 seconds');
-    } else {
-      console.error('Classification error:', error);
-    }
-    return null;
-  }
-};
-
-// Helper function to capitalize category names properly
-const capitalizeCategory = (category) => {
-  const categoryMap = {
-    'story_rant': 'Story/Rant',
-    'sports': 'Sports',
-    'entertainment': 'Entertainment',
-    'news': 'News'
-  };
-  return categoryMap[category.toLowerCase()] || category;
-};
-
 const handler = async (req, res) => {
   if (req.method === 'OPTIONS') {
     setCorsHeaders(req, res);
@@ -184,28 +24,101 @@ const handler = async (req, res) => {
 
   setCorsHeaders(req, res);
 
+  // ✅ Handle LIKE and UNLIKE updates
+  if (req.method === 'PUT' || req.method === 'PATCH') {
+    const { postId, action, username } = req.body;
+
+    if (!postId || !action || !username) {
+      return res.status(400).json({ message: 'Post ID, action, and username are required' });
+    }
+
+    if (!['like', 'unlike'].includes(action)) {
+      return res.status(400).json({ message: 'Unsupported action' });
+    }
+
+    try {
+      const [postRows] = await promisePool.execute('SELECT * FROM posts WHERE _id = ?', [postId]);
+      const post = postRows[0];
+
+      if (!post) {
+        return res.status(404).json({ message: 'Post not found' });
+      }
+
+      let updatedLikes = post.likes;
+      let updatedLikedBy = JSON.parse(post.likedBy || '[]');
+
+      if (action === 'like') {
+        if (updatedLikedBy.includes(username)) {
+          return res.status(400).json({ message: 'You have already liked this post' });
+        }
+        updatedLikes += 1;
+        updatedLikedBy.push(username);
+      }
+
+      if (action === 'unlike') {
+        if (!updatedLikedBy.includes(username)) {
+          return res.status(400).json({ message: 'You have not liked this post yet' });
+        }
+        updatedLikes -= 1;
+        updatedLikedBy = updatedLikedBy.filter(user => user !== username);
+      }
+
+      await promisePool.execute(
+        'UPDATE posts SET likes = ?, likedBy = ? WHERE _id = ?',
+        [updatedLikes, JSON.stringify(updatedLikedBy), postId]
+      );
+
+      const updatedPost = {
+        _id: postId,
+        message: post.message,
+        timestamp: post.timestamp,
+        username: post.username,
+        likes: updatedLikes,
+        likedBy: updatedLikedBy,
+        comments: JSON.parse(post.comments || '[]'),
+        photo: post.photo,
+        profilePicture: post.profilePicture,
+        tags: JSON.parse(post.tags || '[]'),
+        replyTo: JSON.parse(post.replyTo || 'null'),
+        categories: post.categories || null
+      };
+
+      try {
+        await publishToAbly('updateOpinion', updatedPost);
+      } catch (error) {
+        console.error('Error publishing to Ably:', error);
+      }
+
+      return res.status(200).json(updatedPost);
+    } catch (error) {
+      console.error('Error updating post:', error);
+      return res.status(500).json({ message: 'Error updating post', error });
+    }
+  }
+
+  // ✅ Handle NEW post creation
   if (req.method === 'POST') {
     const { message, username, sessionId, photo, profilePic, tags, replyTo } = req.body;
-    
+
     if (!username || !sessionId) {
       return res.status(400).json({ message: 'Username and sessionId are required' });
     }
-    
+
     if (!message && !photo) {
       return res.status(400).json({ message: 'Post content cannot be empty' });
     }
 
     const conn = await promisePool.getConnection();
-    
+
     try {
       await conn.beginTransaction();
-      
+
       let profilePicture = 'https://latestnewsandaffairs.site/public/pfp1.jpg';
       const [userResult] = await conn.execute(
         'SELECT profile_picture FROM users WHERE username = ? LIMIT 1',
         [username]
       );
-      
+
       if (userResult.length && userResult[0].profile_picture) {
         profilePicture = userResult[0].profile_picture;
       }
@@ -220,12 +133,12 @@ const handler = async (req, res) => {
           'SELECT _id, username, message, photo, timestamp FROM posts WHERE _id = ?',
           [replyTo.postId]
         );
-        
+
         if (!replyPost.length) {
           await conn.rollback();
           return res.status(400).json({ message: 'Replied-to post not found' });
         }
-        
+
         const rp = replyPost[0];
         replyToData = {
           postId: rp._id,
@@ -235,23 +148,26 @@ const handler = async (req, res) => {
           timestamp: rp.timestamp
         };
       }
-const [result] = await conn.execute(
-  `INSERT INTO posts (
-     message, timestamp, username, sessionId, likes, likedBy, photo, tags, replyTo, categories
-   ) VALUES (?, NOW(), ?, ?, 0, ?, ?, ?, ?, ?)`,
-  [
-    message || '',
-    username,
-    sessionId,
-    '[]', // likedBy
-    photo || null,
-    JSON.stringify(extractedTags), // tags
-    replyToData ? JSON.stringify(replyToData) : null,
-    null // categories
-  ]
-);
+
+      const [result] = await conn.execute(
+        `INSERT INTO posts (
+          message, timestamp, username, sessionId, likes, likedBy, comments, photo, tags, replyTo, categories
+        ) VALUES (?, NOW(), ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
+        [
+          message || '',
+          username,
+          sessionId,
+          '[]', // likedBy
+          '[]', // comments
+          photo || null,
+          JSON.stringify(extractedTags), // tags
+          replyToData ? JSON.stringify(replyToData) : null,
+          null // categories
+        ]
+      );
+
       const postId = result.insertId;
-      
+
       const newPost = {
         _id: postId,
         message: message || '',
@@ -267,7 +183,7 @@ const [result] = await conn.execute(
         categories: null
       };
 
-      // Send notifications
+      // Notifications
       const notifications = [];
       if (username) {
         notifications.push(sendPostNotificationsToFollowers(conn, username, postId, message, photo));
@@ -281,7 +197,7 @@ const [result] = await conn.execute(
 
       await Promise.allSettled(notifications);
 
-      // Classify post content using your custom FastAPI model
+      // Classify content
       const category = await classifyPostContent(message, photo);
       const finalCategory = category || null;
 
@@ -309,7 +225,7 @@ const [result] = await conn.execute(
       conn.release();
     }
   }
-  
+
   return res.status(405).json({ message: 'Method Not Allowed' });
 };
 
