@@ -77,6 +77,7 @@ const handleProfileUpdate = async (req, res) => {
 };
 
 // Post interactions
+// Post interactions
 const handlePostInteraction = async (req, res) => {
   const { postId, username, action, comment, reply, commentId, replyId } = req.body;
 
@@ -97,10 +98,10 @@ const handlePostInteraction = async (req, res) => {
     if (action === 'like') {
       shouldUpdatePost = handleLike(post, username);
     }
-
     else if (action === 'heart comment') {
+      // More robust comment existence check
       const [comments] = await promisePool.execute(
-        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ?',
+        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND parent_comment_id IS NULL',
         [commentId, postId]
       );
       if (!comments.length) return res.status(404).json({ message: 'Comment not found' });
@@ -122,12 +123,11 @@ const handlePostInteraction = async (req, res) => {
         );
       }
     }
-
     else if (action === 'reply') {
       if (!reply || !reply.trim()) return res.status(400).json({ message: 'Reply cannot be empty' });
 
       const [parentComments] = await promisePool.execute(
-        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ?',
+        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND parent_comment_id IS NULL',
         [commentId, postId]
       );
       if (!parentComments.length) return res.status(404).json({ message: 'Parent comment not found' });
@@ -138,7 +138,6 @@ const handlePostInteraction = async (req, res) => {
         [newReplyId, postId, commentId, username, reply]
       );
     }
-
     else if (action === 'heart reply') {
       const [replies] = await promisePool.execute(
         'SELECT comment_id FROM comments WHERE comment_id = ? AND parent_comment_id = ?',
@@ -163,7 +162,6 @@ const handlePostInteraction = async (req, res) => {
         );
       }
     }
-
     else if (action === 'comment') {
       if (!comment || !comment.trim()) return res.status(400).json({ message: 'Comment cannot be empty' });
 
@@ -173,7 +171,6 @@ const handlePostInteraction = async (req, res) => {
         [newCommentId, postId, username, comment]
       );
     }
-
     else {
       return res.status(400).json({ message: 'Invalid action' });
     }
@@ -226,6 +223,7 @@ module.exports = async function handler(req, res) {
 
   return res.status(405).json({ message: 'Method Not Allowed' });
 };
+
 
 
 
