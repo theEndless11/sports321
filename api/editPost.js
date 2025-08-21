@@ -1,7 +1,7 @@
 const { promisePool } = require('../utils/db');
 const { v4: uuidv4 } = require('uuid');
 
-// --- Helper: Set CORS headers ---
+// CORS headers
 const setCorsHeaders = (res) => {
   res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
@@ -9,24 +9,53 @@ const setCorsHeaders = (res) => {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
 
-// --- Helper: Like/unlike logic ---
-const handleLike = (post, username) => {
-  const likedBy = post.likedBy;
-  if (likedBy.includes(username)) {
-    post.likes -= 1;
-    post.likedBy = likedBy.filter(user => user !== username);
-  } else {
-    post.likes += 1;
-    post.likedBy.push(username);
-  }
-  return true;
+// Helper: normalize DB comment row to frontend-friendly comment object
+const normalizeComment = (dbComment) => ({
+  commentId: dbComment.comment_id,
+  parentCommentId: dbComment.parent_comment_id === null ? null : dbComment.parent_comment_id,
+  username: dbComment.username,
+  profilePicture: dbComment.profile_picture || null, // optional, if you store profile pics
+  commentText: dbComment.comment_text,
+  createdAt: dbComment.created_at,
+  updatedAt: dbComment.updated_at,
+  hearts: dbComment.hearts_count || 0,
+  replies: [], // will be populated in tree building
+});
+
+// Build comment tree with nested replies
+const buildCommentTree = (comments) => {
+  const commentMap = new Map();
+
+  // Initialize map & add replies array
+  comments.forEach(c => {
+    c.replies = [];
+    commentMap.set(c.commentId, c);
+  });
+
+  const topLevelComments = [];
+
+  comments.forEach(c => {
+    if (c.parentCommentId) {
+      const parent = commentMap.get(c.parentCommentId);
+      if (parent) {
+        parent.replies.push(c);
+      } else {
+        // Orphaned reply? Push as top-level to avoid data loss
+        topLevelComments.push(c);
+      }
+    } else {
+      topLevelComments.push(c);
+    }
+  });
+
+  return topLevelComments;
 };
 
-// --- Helper: Fetch post with comments ---
+// Get post with comments and nested replies
 const getPostWithComments = async (postId) => {
   const [posts] = await promisePool.execute('SELECT * FROM posts WHERE _id = ?', [postId]);
-  const [comments] = await promisePool.execute(
-    'SELECT * FROM comments WHERE post_id = ?',
+  const [commentsRaw] = await promisePool.execute(
+    'SELECT * FROM comments WHERE post_id = ? ORDER BY created_at ASC',
     [postId]
   );
 
@@ -34,22 +63,24 @@ const getPostWithComments = async (postId) => {
 
   const post = posts[0];
   post.likedBy = JSON.parse(post.likedBy || '[]');
-  post.comments = comments;
+
+  // Normalize comments
+  const normalizedComments = commentsRaw.map(normalizeComment);
+
+  // Build nested replies tree
+  post.comments = buildCommentTree(normalizedComments);
 
   return post;
 };
 
-// --- Handler: Profile updates ---
+// Handle profile updates
 const handleProfileUpdate = async (req, res) => {
   const { username, hobby, description, profilePicture, Music } = req.body;
   if (!username) return res.status(400).json({ message: 'Username is required' });
 
   try {
     if (Music !== undefined) {
-      await promisePool.execute(
-        'UPDATE users SET Music = ? WHERE username = ?',
-        [Music, username]
-      );
+      await promisePool.execute('UPDATE users SET Music = ? WHERE username = ?', [Music, username]);
     }
 
     const updates = [];
@@ -70,20 +101,30 @@ const handleProfileUpdate = async (req, res) => {
 
     if (updates.length) {
       values.push(username);
-      await promisePool.execute(
-        `UPDATE users SET ${updates.join(', ')} WHERE username = ?`,
-        values
-      );
+      await promisePool.execute(`UPDATE users SET ${updates.join(', ')} WHERE username = ?`, values);
     }
 
     return res.status(200).json({ message: 'Profile updated successfully' });
   } catch (error) {
-    console.error('[PROFILE] Update failed:', error);
+    console.error('Error updating profile:', error);
     return res.status(500).json({ message: 'Error updating profile', error: error.message });
   }
 };
 
-// --- Handler: Post interactions ---
+// Like/unlike post logic
+const handleLike = (post, username) => {
+  const likedBy = post.likedBy;
+  if (likedBy.includes(username)) {
+    post.likes -= 1;
+    post.likedBy = likedBy.filter(user => user !== username);
+  } else {
+    post.likes += 1;
+    post.likedBy.push(username);
+  }
+  return true;
+};
+
+// Handle all post interactions (like, comment, reply, hearts)
 const handlePostInteraction = async (req, res) => {
   const { postId, username, action, comment, reply, commentId, replyId } = req.body;
 
@@ -100,19 +141,18 @@ const handlePostInteraction = async (req, res) => {
 
     let shouldUpdatePost = false;
 
-    // --- Like post ---
     if (action === 'like') {
       shouldUpdatePost = handleLike(post, username);
     }
-
-    // --- Heart comment ---
     else if (action === 'heart comment') {
+      // Check comment exists
       const [comments] = await promisePool.execute(
         'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND (parent_comment_id IS NULL OR parent_comment_id = ?)',
         [commentId, postId, '*NULL*']
       );
       if (!comments.length) return res.status(404).json({ message: 'Comment not found' });
 
+      // Toggle heart
       const [existingHeart] = await promisePool.execute(
         'SELECT id FROM comment_hearts WHERE comment_id = ? AND username = ?',
         [commentId, username]
@@ -130,12 +170,11 @@ const handlePostInteraction = async (req, res) => {
         );
       }
     }
-
-    // --- Add a reply ---
     else if (action === 'reply') {
-      console.log('[REPLY] Incoming:', { postId, commentId, reply, username, replyId });
+      console.log('[REPLY] Incoming reply:', { postId, commentId, reply, username, replyId });
 
       if (!reply || !reply.trim()) {
+        console.warn('[REPLY] Empty reply text');
         return res.status(400).json({ message: 'Reply cannot be empty' });
       }
 
@@ -145,10 +184,12 @@ const handlePostInteraction = async (req, res) => {
       );
 
       if (!parentComments.length) {
+        console.warn('[REPLY] Parent comment not found:', commentId);
         return res.status(404).json({ message: 'Parent comment not found' });
       }
 
       const newReplyId = replyId || uuidv4();
+      console.log('[REPLY] Inserting reply with ID:', newReplyId);
 
       try {
         const [result] = await promisePool.execute(
@@ -163,8 +204,6 @@ const handlePostInteraction = async (req, res) => {
         return res.status(500).json({ message: 'Reply insert failed', error: err.message });
       }
     }
-
-    // --- Heart a reply ---
     else if (action === 'heart reply') {
       const [replies] = await promisePool.execute(
         'SELECT comment_id FROM comments WHERE comment_id = ? AND parent_comment_id = ?',
@@ -189,12 +228,8 @@ const handlePostInteraction = async (req, res) => {
         );
       }
     }
-
-    // --- Add a top-level comment ---
     else if (action === 'comment') {
-      if (!comment || !comment.trim()) {
-        return res.status(400).json({ message: 'Comment cannot be empty' });
-      }
+      if (!comment || !comment.trim()) return res.status(400).json({ message: 'Comment cannot be empty' });
 
       const newCommentId = commentId || uuidv4();
       await promisePool.execute(
@@ -202,13 +237,11 @@ const handlePostInteraction = async (req, res) => {
         [newCommentId, postId, username, comment]
       );
     }
-
-    // --- Invalid action ---
     else {
       return res.status(400).json({ message: 'Invalid action' });
     }
 
-    // Update likes in post if modified
+    // Update post likes if needed
     if (shouldUpdatePost) {
       await promisePool.execute(
         'UPDATE posts SET likes = ?, likedBy = ? WHERE _id = ?',
@@ -216,16 +249,17 @@ const handlePostInteraction = async (req, res) => {
       );
     }
 
+    // Fetch and return updated post with comments & nested replies
     const updatedPost = await getPostWithComments(postId);
     return res.status(200).json(updatedPost);
 
   } catch (error) {
-    console.error('[POST] Error handling post interaction:', error);
+    console.error('Error updating post:', error);
     return res.status(500).json({ message: 'Error updating post', error: error.message });
   }
 };
 
-// --- Main entry point handler ---
+// Main handler
 module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     setCorsHeaders(res);
@@ -235,19 +269,19 @@ module.exports = async function handler(req, res) {
   setCorsHeaders(res);
 
   if (req.method === 'POST') {
-    const { requestType, postId, username, description, profilePicture, Music, hobby } = req.body;
+    const { requestType } = req.body;
 
     if (
       requestType === 'profile' ||
-      description !== undefined ||
-      profilePicture !== undefined ||
-      Music !== undefined ||
-      hobby !== undefined
+      req.body.description !== undefined ||
+      req.body.profilePicture !== undefined ||
+      req.body.Music !== undefined ||
+      req.body.hobby !== undefined
     ) {
       return await handleProfileUpdate(req, res);
     }
 
-    if (requestType === 'post' || postId) {
+    if (requestType === 'post' || req.body.postId) {
       return await handlePostInteraction(req, res);
     }
 
@@ -256,7 +290,6 @@ module.exports = async function handler(req, res) {
 
   return res.status(405).json({ message: 'Method Not Allowed' });
 };
-
 
 
 
