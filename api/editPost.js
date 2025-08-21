@@ -122,21 +122,46 @@ const handlePostInteraction = async (req, res) => {
       }
     }
     else if (action === 'reply') {
-      if (!reply || !reply.trim()) return res.status(400).json({ message: 'Reply cannot be empty' });
+  console.log('[REPLY] Incoming reply:', {
+    postId,
+    commentId,
+    reply,
+    username,
+    replyId
+  });
 
-      // Fixed: Handle both NULL and '*NULL*' string values for parent comment check
-      const [parentComments] = await promisePool.execute(
-        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND (parent_comment_id IS NULL OR parent_comment_id = ?)',
-        [commentId, postId, '*NULL*']
-      );
-      if (!parentComments.length) return res.status(404).json({ message: 'Parent comment not found' });
+  if (!reply || !reply.trim()) {
+    console.warn('[REPLY] Empty reply text');
+    return res.status(400).json({ message: 'Reply cannot be empty' });
+  }
 
-      const newReplyId = replyId || uuidv4();
-      await promisePool.execute(
-        'INSERT INTO comments (comment_id, post_id, parent_comment_id, username, comment_text) VALUES (?, ?, ?, ?, ?)',
-        [newReplyId, postId, commentId, username, reply]
-      );
-    }
+  const [parentComments] = await promisePool.execute(
+    'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND (parent_comment_id IS NULL OR parent_comment_id = ?)',
+    [commentId, postId, '*NULL*']
+  );
+
+  if (!parentComments.length) {
+    console.warn('[REPLY] Parent comment not found:', commentId);
+    return res.status(404).json({ message: 'Parent comment not found' });
+  }
+
+  const newReplyId = replyId || uuidv4();
+  console.log('[REPLY] Inserting reply with ID:', newReplyId);
+
+  try {
+    const [result] = await promisePool.execute(
+      'INSERT INTO comments (comment_id, post_id, parent_comment_id, username, comment_text) VALUES (?, ?, ?, ?, ?)',
+      [newReplyId, postId, commentId, username, reply]
+    );
+
+    console.log('[REPLY] Insert success:', result);
+    return res.status(200).json({ message: 'Reply inserted successfully', replyId: newReplyId });
+  } catch (err) {
+    console.error('[REPLY] Insert failed:', err);
+    return res.status(500).json({ message: 'Reply insert failed', error: err.message });
+  }
+}
+
     else if (action === 'heart reply') {
       const [replies] = await promisePool.execute(
         'SELECT comment_id FROM comments WHERE comment_id = ? AND parent_comment_id = ?',
@@ -222,6 +247,7 @@ module.exports = async function handler(req, res) {
 
   return res.status(405).json({ message: 'Method Not Allowed' });
 };
+
 
 
 
