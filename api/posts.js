@@ -42,6 +42,7 @@ module.exports = async function handler(req, res) {
     return await handleRegularPostsFetch(req.query, res, defaultPfp);
   }
 };
+
 // === PERSONALIZED FEED ALGORITHM ===
 async function handlePersonalizedFeed(userId, page, limit, res, defaultPfp) {
   try {
@@ -151,7 +152,7 @@ async function generateFeedComposition(userData, recentlyViewed, limit) {
   };
 
   try {
-    // 1. Get Random/Discovery posts (3 posts)
+    // 1. Get Random/Discovery posts (4 posts)
     const randomPosts = await getRandomPosts(userData, recentlyViewed, composition.random);
     posts.push(...randomPosts);
 
@@ -159,7 +160,7 @@ async function generateFeedComposition(userData, recentlyViewed, limit) {
     const followingPosts = await getFollowingPosts(userData, recentlyViewed, composition.following);
     posts.push(...followingPosts);
 
-    // 3. Get Friends posts (1 post)
+    // 3. Get Friends posts (2 posts)
     const friendsPosts = await getFriendsPosts(userData, recentlyViewed, composition.friends);
     posts.push(...friendsPosts);
 
@@ -387,20 +388,19 @@ async function handleRegularPostsFetch(query, res, defaultPfp) {
     params.push(start_timestamp, end_timestamp);
   }
 
-  // Add category filtering
   // Add category filtering (map frontend keys to database values)
-if (sort && ['story_rant', 'sports', 'entertainment', 'news'].includes(sort)) {
-  const categoryMap = {
-    'story_rant': 'Story/Rant',
-    'sports': 'Sports',
-    'entertainment': 'Entertainment',
-    'news': 'News'
-  };
-  
-  console.log('🔍 Filtering for category:', sort, '-> DB value:', categoryMap[sort]);
-  conditions.push('categories = ?');
-  params.push(categoryMap[sort]); // Use the formatted value stored in DB
-}
+  if (sort && ['story_rant', 'sports', 'entertainment', 'news'].includes(sort)) {
+    const categoryMap = {
+      'story_rant': 'Story/Rant',
+      'sports': 'Sports',
+      'entertainment': 'Entertainment',
+      'news': 'News'
+    };
+    
+    console.log('🔍 Filtering for category:', sort, '-> DB value:', categoryMap[sort]);
+    conditions.push('categories = ?');
+    params.push(categoryMap[sort]); // Use the formatted value stored in DB
+  }
 
   // Add WHERE clause if we have conditions
   if (conditions.length > 0) {
@@ -439,11 +439,11 @@ if (sort && ['story_rant', 'sports', 'entertainment', 'news'].includes(sort)) {
   });
 }
 
-// === POST ENRICHMENT (using comments_count column) ===
+// === POST ENRICHMENT (OPTIMIZED WITH DATABASE TRIGGERS) ===
 async function enrichPostsWithUserData(posts, defaultPfp) {
   if (posts.length === 0) return [];
 
-  // Get unique usernames from posts only (no comment processing for feed)
+  // Get unique usernames from posts only
   const usernames = [...new Set(posts.map(p => p.username))];
   const usersMap = {};
   
@@ -466,7 +466,7 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     username: p.username,
     likes: p.likes,
     likedBy: (p.likedBy && typeof p.likedBy === 'string') ? JSON.parse(p.likedBy) : (p.likedBy || []),
-    commentCount: p.comments_count || 0, // ✅ Use the dedicated comments_count column
+    commentCount: p.comments_count || 0, // ✅ Automatically maintained by database triggers
     photo: p.photo?.startsWith('http') || p.photo?.startsWith('data:image')
       ? p.photo
       : p.photo ? `data:image/jpeg;base64,${p.photo.toString('base64')}` : null,
@@ -474,10 +474,8 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     tags: p.tags ? (typeof p.tags === 'string' ? JSON.parse(p.tags) : p.tags) || [] : [],
     feedType: p.feedType || 'regular',
     views_count: p.views_count || 0
-    // Removed: hearts, dislikes, dislikedBy, full comments data, replyTo, sessionId
   }));
 }
-
 
 
 
