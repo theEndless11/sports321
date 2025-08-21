@@ -171,40 +171,54 @@ else if (action === 'heart comment') {
     );
   }
 }
-    else if (action === 'reply') {
-      console.log('[REPLY] Incoming reply:', { postId, commentId, reply, username, replyId });
+    // In your handlePostInteraction function, make sure the reply insertion section looks like this:
+else if (action === 'reply') {
+  console.log('[REPLY] Incoming reply:', { postId, commentId, reply, username, replyId });
 
-      if (!reply || !reply.trim()) {
-        console.warn('[REPLY] Empty reply text');
-        return res.status(400).json({ message: 'Reply cannot be empty' });
-      }
+  if (!reply || !reply.trim()) {
+    console.warn('[REPLY] Empty reply text');
+    return res.status(400).json({ message: 'Reply cannot be empty' });
+  }
 
-      const [parentComments] = await promisePool.execute(
-        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND (parent_comment_id IS NULL OR parent_comment_id = ?)',
-        [commentId, postId, '*NULL*']
-      );
+  // FIXED: Simplified parent comment check - just verify the comment exists
+  const [parentComments] = await promisePool.execute(
+    'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ?',
+    [commentId, postId]
+  );
 
-      if (!parentComments.length) {
-        console.warn('[REPLY] Parent comment not found:', commentId);
-        return res.status(404).json({ message: 'Parent comment not found' });
-      }
+  if (!parentComments.length) {
+    console.warn('[REPLY] Parent comment not found:', commentId);
+    return res.status(404).json({ message: 'Parent comment not found' });
+  }
 
-      const newReplyId = replyId || uuidv4();
-      console.log('[REPLY] Inserting reply with ID:', newReplyId);
+  const newReplyId = replyId || uuidv4();
+  console.log('[REPLY] Inserting reply with ID:', newReplyId);
 
-      try {
-        const [result] = await promisePool.execute(
-          'INSERT INTO comments (comment_id, post_id, parent_comment_id, username, comment_text) VALUES (?, ?, ?, ?, ?)',
-          [newReplyId, postId, commentId, username, reply]
-        );
+  try {
+    const [result] = await promisePool.execute(
+      'INSERT INTO comments (comment_id, post_id, parent_comment_id, username, comment_text) VALUES (?, ?, ?, ?, ?)',
+      [newReplyId, postId, commentId, username, reply]
+    );
 
-        console.log('[REPLY] Insert success:', result);
-        return res.status(200).json({ message: 'Reply inserted successfully', replyId: newReplyId });
-      } catch (err) {
-        console.error('[REPLY] Insert failed:', err);
-        return res.status(500).json({ message: 'Reply insert failed', error: err.message });
-      }
-    }
+    console.log('[REPLY] Insert success:', result);
+    console.log('[REPLY] Inserted reply data:', {
+      comment_id: newReplyId,
+      post_id: postId,
+      parent_comment_id: commentId,
+      username: username,
+      comment_text: reply
+    });
+
+    return res.status(200).json({ 
+      message: 'Reply inserted successfully', 
+      replyId: newReplyId,
+      parentCommentId: commentId 
+    });
+  } catch (err) {
+    console.error('[REPLY] Insert failed:', err);
+    return res.status(500).json({ message: 'Reply insert failed', error: err.message });
+  }
+}
     else if (action === 'heart reply') {
       const [replies] = await promisePool.execute(
         'SELECT comment_id FROM comments WHERE comment_id = ? AND parent_comment_id = ?',
@@ -291,6 +305,7 @@ module.exports = async function handler(req, res) {
 
   return res.status(405).json({ message: 'Method Not Allowed' });
 };
+
 
 
 
