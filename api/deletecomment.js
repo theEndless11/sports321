@@ -3,7 +3,7 @@ const { promisePool } = require('../utils/db'); // MySQL connection pool
 
 // Configure CORS options
 const corsOptions = {
-    origin: ['https://latestnewsandaffairs.site', 'http://localhost:3000'], // Added localhost for development
+    origin: ['https://latestnewsandaffairs.site', 'http://localhost:5173'], // Added localhost for development
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
