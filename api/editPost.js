@@ -75,8 +75,6 @@ const handleProfileUpdate = async (req, res) => {
     return res.status(500).json({ message: 'Error updating profile', error: error.message });
   }
 };
-
-// Post interactions
 // Post interactions
 const handlePostInteraction = async (req, res) => {
   const { postId, username, action, comment, reply, commentId, replyId } = req.body;
@@ -99,10 +97,10 @@ const handlePostInteraction = async (req, res) => {
       shouldUpdatePost = handleLike(post, username);
     }
     else if (action === 'heart comment') {
-      // More robust comment existence check
+      // Fixed: Handle both NULL and '*NULL*' string values
       const [comments] = await promisePool.execute(
-        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND parent_comment_id IS NULL',
-        [commentId, postId]
+        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND (parent_comment_id IS NULL OR parent_comment_id = ?)',
+        [commentId, postId, '*NULL*']
       );
       if (!comments.length) return res.status(404).json({ message: 'Comment not found' });
 
@@ -126,9 +124,10 @@ const handlePostInteraction = async (req, res) => {
     else if (action === 'reply') {
       if (!reply || !reply.trim()) return res.status(400).json({ message: 'Reply cannot be empty' });
 
+      // Fixed: Handle both NULL and '*NULL*' string values for parent comment check
       const [parentComments] = await promisePool.execute(
-        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND parent_comment_id IS NULL',
-        [commentId, postId]
+        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND (parent_comment_id IS NULL OR parent_comment_id = ?)',
+        [commentId, postId, '*NULL*']
       );
       if (!parentComments.length) return res.status(404).json({ message: 'Parent comment not found' });
 
@@ -223,6 +222,7 @@ module.exports = async function handler(req, res) {
 
   return res.status(405).json({ message: 'Method Not Allowed' });
 };
+
 
 
 
