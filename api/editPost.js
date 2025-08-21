@@ -1,7 +1,7 @@
 const { promisePool } = require('../utils/db');
 const { v4: uuidv4 } = require('uuid');
 
-// CORS headers
+// --- Helper: Set CORS headers ---
 const setCorsHeaders = (res) => {
   res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
@@ -9,7 +9,7 @@ const setCorsHeaders = (res) => {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
 
-// Like/unlike logic
+// --- Helper: Like/unlike logic ---
 const handleLike = (post, username) => {
   const likedBy = post.likedBy;
   if (likedBy.includes(username)) {
@@ -22,7 +22,7 @@ const handleLike = (post, username) => {
   return true;
 };
 
-// Get post with comments
+// --- Helper: Fetch post with comments ---
 const getPostWithComments = async (postId) => {
   const [posts] = await promisePool.execute('SELECT * FROM posts WHERE _id = ?', [postId]);
   const [comments] = await promisePool.execute(
@@ -39,14 +39,17 @@ const getPostWithComments = async (postId) => {
   return post;
 };
 
-// Profile update logic
+// --- Handler: Profile updates ---
 const handleProfileUpdate = async (req, res) => {
   const { username, hobby, description, profilePicture, Music } = req.body;
   if (!username) return res.status(400).json({ message: 'Username is required' });
 
   try {
     if (Music !== undefined) {
-      await promisePool.execute('UPDATE users SET Music = ? WHERE username = ?', [Music, username]);
+      await promisePool.execute(
+        'UPDATE users SET Music = ? WHERE username = ?',
+        [Music, username]
+      );
     }
 
     const updates = [];
@@ -67,15 +70,20 @@ const handleProfileUpdate = async (req, res) => {
 
     if (updates.length) {
       values.push(username);
-      await promisePool.execute(`UPDATE users SET ${updates.join(', ')} WHERE username = ?`, values);
+      await promisePool.execute(
+        `UPDATE users SET ${updates.join(', ')} WHERE username = ?`,
+        values
+      );
     }
 
     return res.status(200).json({ message: 'Profile updated successfully' });
   } catch (error) {
+    console.error('[PROFILE] Update failed:', error);
     return res.status(500).json({ message: 'Error updating profile', error: error.message });
   }
 };
-// Post interactions
+
+// --- Handler: Post interactions ---
 const handlePostInteraction = async (req, res) => {
   const { postId, username, action, comment, reply, commentId, replyId } = req.body;
 
@@ -89,15 +97,16 @@ const handlePostInteraction = async (req, res) => {
 
     const post = posts[0];
     post.likedBy = JSON.parse(post.likedBy || '[]');
-    post.comments = JSON.parse(post.comments || '[]');
 
     let shouldUpdatePost = false;
 
+    // --- Like post ---
     if (action === 'like') {
       shouldUpdatePost = handleLike(post, username);
     }
+
+    // --- Heart comment ---
     else if (action === 'heart comment') {
-      // Fixed: Handle both NULL and '*NULL*' string values
       const [comments] = await promisePool.execute(
         'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND (parent_comment_id IS NULL OR parent_comment_id = ?)',
         [commentId, postId, '*NULL*']
@@ -121,47 +130,41 @@ const handlePostInteraction = async (req, res) => {
         );
       }
     }
+
+    // --- Add a reply ---
     else if (action === 'reply') {
-  console.log('[REPLY] Incoming reply:', {
-    postId,
-    commentId,
-    reply,
-    username,
-    replyId
-  });
+      console.log('[REPLY] Incoming:', { postId, commentId, reply, username, replyId });
 
-  if (!reply || !reply.trim()) {
-    console.warn('[REPLY] Empty reply text');
-    return res.status(400).json({ message: 'Reply cannot be empty' });
-  }
+      if (!reply || !reply.trim()) {
+        return res.status(400).json({ message: 'Reply cannot be empty' });
+      }
 
-  const [parentComments] = await promisePool.execute(
-    'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND (parent_comment_id IS NULL OR parent_comment_id = ?)',
-    [commentId, postId, '*NULL*']
-  );
+      const [parentComments] = await promisePool.execute(
+        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND (parent_comment_id IS NULL OR parent_comment_id = ?)',
+        [commentId, postId, '*NULL*']
+      );
 
-  if (!parentComments.length) {
-    console.warn('[REPLY] Parent comment not found:', commentId);
-    return res.status(404).json({ message: 'Parent comment not found' });
-  }
+      if (!parentComments.length) {
+        return res.status(404).json({ message: 'Parent comment not found' });
+      }
 
-  const newReplyId = replyId || uuidv4();
-  console.log('[REPLY] Inserting reply with ID:', newReplyId);
+      const newReplyId = replyId || uuidv4();
 
-  try {
-    const [result] = await promisePool.execute(
-      'INSERT INTO comments (comment_id, post_id, parent_comment_id, username, comment_text) VALUES (?, ?, ?, ?, ?)',
-      [newReplyId, postId, commentId, username, reply]
-    );
+      try {
+        const [result] = await promisePool.execute(
+          'INSERT INTO comments (comment_id, post_id, parent_comment_id, username, comment_text) VALUES (?, ?, ?, ?, ?)',
+          [newReplyId, postId, commentId, username, reply]
+        );
 
-    console.log('[REPLY] Insert success:', result);
-    return res.status(200).json({ message: 'Reply inserted successfully', replyId: newReplyId });
-  } catch (err) {
-    console.error('[REPLY] Insert failed:', err);
-    return res.status(500).json({ message: 'Reply insert failed', error: err.message });
-  }
-}
+        console.log('[REPLY] Insert success:', result);
+        return res.status(200).json({ message: 'Reply inserted successfully', replyId: newReplyId });
+      } catch (err) {
+        console.error('[REPLY] Insert failed:', err);
+        return res.status(500).json({ message: 'Reply insert failed', error: err.message });
+      }
+    }
 
+    // --- Heart a reply ---
     else if (action === 'heart reply') {
       const [replies] = await promisePool.execute(
         'SELECT comment_id FROM comments WHERE comment_id = ? AND parent_comment_id = ?',
@@ -186,8 +189,12 @@ const handlePostInteraction = async (req, res) => {
         );
       }
     }
+
+    // --- Add a top-level comment ---
     else if (action === 'comment') {
-      if (!comment || !comment.trim()) return res.status(400).json({ message: 'Comment cannot be empty' });
+      if (!comment || !comment.trim()) {
+        return res.status(400).json({ message: 'Comment cannot be empty' });
+      }
 
       const newCommentId = commentId || uuidv4();
       await promisePool.execute(
@@ -195,11 +202,13 @@ const handlePostInteraction = async (req, res) => {
         [newCommentId, postId, username, comment]
       );
     }
+
+    // --- Invalid action ---
     else {
       return res.status(400).json({ message: 'Invalid action' });
     }
 
-    // Update likes if needed
+    // Update likes in post if modified
     if (shouldUpdatePost) {
       await promisePool.execute(
         'UPDATE posts SET likes = ?, likedBy = ? WHERE _id = ?',
@@ -211,12 +220,12 @@ const handlePostInteraction = async (req, res) => {
     return res.status(200).json(updatedPost);
 
   } catch (error) {
-    console.error('Error updating post:', error);
+    console.error('[POST] Error handling post interaction:', error);
     return res.status(500).json({ message: 'Error updating post', error: error.message });
   }
 };
 
-// Main handler
+// --- Main entry point handler ---
 module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     setCorsHeaders(res);
@@ -226,19 +235,19 @@ module.exports = async function handler(req, res) {
   setCorsHeaders(res);
 
   if (req.method === 'POST') {
-    const { requestType } = req.body;
+    const { requestType, postId, username, description, profilePicture, Music, hobby } = req.body;
 
     if (
       requestType === 'profile' ||
-      req.body.description !== undefined ||
-      req.body.profilePicture !== undefined ||
-      req.body.Music !== undefined ||
-      req.body.hobby !== undefined
+      description !== undefined ||
+      profilePicture !== undefined ||
+      Music !== undefined ||
+      hobby !== undefined
     ) {
       return await handleProfileUpdate(req, res);
     }
 
-    if (requestType === 'post' || req.body.postId) {
+    if (requestType === 'post' || postId) {
       return await handlePostInteraction(req, res);
     }
 
@@ -247,7 +256,6 @@ module.exports = async function handler(req, res) {
 
   return res.status(405).json({ message: 'Method Not Allowed' });
 };
-
 
 
 
