@@ -144,32 +144,33 @@ const handlePostInteraction = async (req, res) => {
     if (action === 'like') {
       shouldUpdatePost = handleLike(post, username);
     }
-    else if (action === 'heart comment') {
-      // Check comment exists
-      const [comments] = await promisePool.execute(
-        'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ? AND (parent_comment_id IS NULL OR parent_comment_id = ?)',
-        [commentId, postId, '*NULL*']
-      );
-      if (!comments.length) return res.status(404).json({ message: 'Comment not found' });
+    // In your handlePostInteraction function, replace this section:
+else if (action === 'heart comment') {
+  // Check comment exists - FIXED: Simplified query
+  const [comments] = await promisePool.execute(
+    'SELECT comment_id FROM comments WHERE comment_id = ? AND post_id = ?',
+    [commentId, postId]
+  );
+  if (!comments.length) return res.status(404).json({ message: 'Comment not found' });
 
-      // Toggle heart
-      const [existingHeart] = await promisePool.execute(
-        'SELECT id FROM comment_hearts WHERE comment_id = ? AND username = ?',
-        [commentId, username]
-      );
+  // Toggle heart
+  const [existingHeart] = await promisePool.execute(
+    'SELECT id FROM comment_hearts WHERE comment_id = ? AND username = ?',
+    [commentId, username]
+  );
 
-      if (existingHeart.length) {
-        await promisePool.execute(
-          'DELETE FROM comment_hearts WHERE comment_id = ? AND username = ?',
-          [commentId, username]
-        );
-      } else {
-        await promisePool.execute(
-          'INSERT INTO comment_hearts (comment_id, username) VALUES (?, ?)',
-          [commentId, username]
-        );
-      }
-    }
+  if (existingHeart.length) {
+    await promisePool.execute(
+      'DELETE FROM comment_hearts WHERE comment_id = ? AND username = ?',
+      [commentId, username]
+    );
+  } else {
+    await promisePool.execute(
+      'INSERT INTO comment_hearts (comment_id, username) VALUES (?, ?)',
+      [commentId, username]
+    );
+  }
+}
     else if (action === 'reply') {
       console.log('[REPLY] Incoming reply:', { postId, commentId, reply, username, replyId });
 
@@ -290,6 +291,7 @@ module.exports = async function handler(req, res) {
 
   return res.status(405).json({ message: 'Method Not Allowed' });
 };
+
 
 
 
