@@ -433,18 +433,17 @@ async function handleRegularPostsFetch(query, res, defaultPfp) {
   });
 }
 
-// === POST ENRICHMENT INCLUDING replyTo ===
 async function enrichPostsWithUserData(posts, defaultPfp) {
   if (posts.length === 0) return [];
 
-  // Collect usernames from posts
+  // Get unique usernames from posts only
   const usernames = [...new Set(posts.map(p => p.username))];
 
-  // Also collect usernames from replyTo fields in posts
+  // Also get usernames from replyTo if any
   const replyToUsernames = posts
-    .map(post => {
+    .map(p => {
       try {
-        const replyTo = post.replyTo ? JSON.parse(post.replyTo) : null;
+        const replyTo = p.replyTo ? JSON.parse(p.replyTo) : null;
         return replyTo?.username;
       } catch {
         return null;
@@ -452,16 +451,14 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     })
     .filter(Boolean);
 
-  // Combine all usernames
+  // Combine usernames from posts and replyTo
   const allUsernames = [...new Set([...usernames, ...replyToUsernames])];
 
   const usersMap = {};
   if (allUsernames.length) {
-    const placeholders = allUsernames.map(() => '?').join(',');
-    const [users] = await promisePool.execute(
-      `SELECT username, profile_picture FROM users WHERE username IN (${placeholders})`,
-      allUsernames
-    );
+    const userSql = `SELECT username, profile_picture FROM users WHERE username IN (${allUsernames.map(() => '?').join(',')})`;
+    const [users] = await promisePool.execute(userSql, allUsernames);
+
     users.forEach(u => {
       usersMap[u.username.toLowerCase()] = u.profile_picture?.startsWith('data:image')
         ? u.profile_picture
@@ -471,29 +468,12 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     });
   }
 
-  return posts.map(post => {
-    // Parse comments safely
-    let comments = [];
-    try {
-      comments = post.comments ? JSON.parse(post.comments) : [];
-    } catch {
-      comments = [];
-    }
-
-    // Enrich comments with profile pictures, including nested replies
-    const enrichedComments = comments.map(comment => ({
-      ...comment,
-      profilePicture: usersMap[comment.username?.toLowerCase()] || defaultPfp,
-      replies: (comment.replies || []).map(reply => ({
-        ...reply,
-        profilePicture: usersMap[reply.username?.toLowerCase()] || defaultPfp,
-      })),
-    }));
-
-    // Enrich replyTo data with profile picture
+  // Return lightweight post objects for feed view
+  return posts.map(p => {
+    // Enrich replyTo if present
     let replyToData = null;
     try {
-      replyToData = post.replyTo ? JSON.parse(post.replyTo) : null;
+      replyToData = p.replyTo ? JSON.parse(p.replyTo) : null;
       if (replyToData) {
         replyToData.profilePicture = usersMap[replyToData.username?.toLowerCase()] || defaultPfp;
       }
@@ -502,28 +482,25 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     }
 
     return {
-      _id: post._id,
-      message: post.message,
-      timestamp: post.timestamp,
-      username: post.username,
-      sessionId: post.sessionId,
-      likes: post.likes,
-      dislikes: post.dislikes,
-      likedBy: post.likedBy ? JSON.parse(post.likedBy) : [],
-      dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
-      hearts: post.hearts,
-      comments: enrichedComments,
-      photo: post.photo && (post.photo.startsWith('http') || post.photo.startsWith('data:image/'))
-        ? post.photo
-        : post.photo
-        ? `data:image/jpeg;base64,${post.photo.toString('base64')}`
-        : null,
-      profilePicture: usersMap[post.username.toLowerCase()] || defaultPfp,
-      tags: post.tags ? JSON.parse(post.tags) : [],
-      replyTo: replyToData,
+      _id: p._id,
+      message: p.message,
+      timestamp: p.timestamp,
+      username: p.username,
+      likes: p.likes,
+      likedBy: (p.likedBy && typeof p.likedBy === 'string') ? JSON.parse(p.likedBy) : (p.likedBy || []),
+      commentCount: p.comments_count || 0, // ✅ untouched, as per your request
+      photo: p.photo?.startsWith('http') || p.photo?.startsWith('data:image')
+        ? p.photo
+        : p.photo ? `data:image/jpeg;base64,${p.photo.toString('base64')}` : null,
+      profilePicture: usersMap[p.username.toLowerCase()] || defaultPfp,
+      tags: p.tags ? (typeof p.tags === 'string' ? JSON.parse(p.tags) : p.tags) || [] : [],
+      feedType: p.feedType || 'regular',
+      views_count: p.views_count || 0,
+      replyTo: replyToData // <-- added enriched replyTo here
     };
   });
 }
+
 
 
 
