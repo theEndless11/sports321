@@ -368,14 +368,13 @@ async function handleRegularPostsFetch(query, res, defaultPfp) {
     end_timestamp,
     page = 1,
     limit = 10,
-    sort
+    sort,
   } = query;
 
   let sql = 'SELECT * FROM posts';
   const params = [];
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
-  // Handle filtering conditions
   const conditions = [];
 
   if (username_like) {
@@ -388,34 +387,29 @@ async function handleRegularPostsFetch(query, res, defaultPfp) {
     params.push(start_timestamp, end_timestamp);
   }
 
-  // Add category filtering (map frontend keys to database values)
   if (sort && ['story_rant', 'sports', 'entertainment', 'news'].includes(sort)) {
     const categoryMap = {
-      'story_rant': 'Story/Rant',
-      'sports': 'Sports',
-      'entertainment': 'Entertainment',
-      'news': 'News'
+      story_rant: 'Story/Rant',
+      sports: 'Sports',
+      entertainment: 'Entertainment',
+      news: 'News',
     };
-    
-    console.log('🔍 Filtering for category:', sort, '-> DB value:', categoryMap[sort]);
     conditions.push('categories = ?');
-    params.push(categoryMap[sort]); // Use the formatted value stored in DB
+    params.push(categoryMap[sort]);
   }
 
-  // Add WHERE clause if we have conditions
   if (conditions.length > 0) {
     sql += ' WHERE ' + conditions.join(' AND ');
   }
 
-  // Handle sorting
   const sortOptions = {
-    'trending': '(likes + comments_count + IFNULL(hearts, 0)) DESC, timestamp DESC', // Most engagement
-    'newest': 'timestamp DESC',
-    'general': 'timestamp DESC', // Default to newest for general
-    'story_rant': 'timestamp DESC', // Category filtered, sorted by newest
-    'sports': 'timestamp DESC',
-    'entertainment': 'timestamp DESC', 
-    'news': 'timestamp DESC'
+    trending: '(likes + comments_count + IFNULL(hearts, 0)) DESC, timestamp DESC',
+    newest: 'timestamp DESC',
+    general: 'timestamp DESC',
+    story_rant: 'timestamp DESC',
+    sports: 'timestamp DESC',
+    entertainment: 'timestamp DESC',
+    news: 'timestamp DESC',
   };
 
   sql += ` ORDER BY ${sortOptions[sort] || 'timestamp DESC'} LIMIT ? OFFSET ?`;
@@ -424,59 +418,113 @@ async function handleRegularPostsFetch(query, res, defaultPfp) {
   const [posts] = await promisePool.execute(sql, params);
   const enrichedPosts = await enrichPostsWithUserData(posts, defaultPfp);
 
-  // Update count query to match filtering
+  // Count total posts matching the filters
   let countQuery = 'SELECT COUNT(*) AS count FROM posts';
   if (conditions.length > 0) {
     countQuery += ' WHERE ' + conditions.join(' AND ');
   }
-  const countParams = params.slice(0, params.length - 2); // Remove LIMIT and OFFSET params
+  const countParams = params.slice(0, params.length - 2);
   const [countResult] = await promisePool.execute(countQuery, countParams);
 
   return res.status(200).json({
     posts: enrichedPosts,
     hasMorePosts: (page * limit) < countResult[0].count,
-    filterType: sort === 'general' ? 'general' : (sort || 'general')
+    filterType: sort === 'general' ? 'general' : (sort || 'general'),
   });
 }
 
-// === POST ENRICHMENT (OPTIMIZED WITH DATABASE TRIGGERS) ===
+// === POST ENRICHMENT INCLUDING replyTo ===
 async function enrichPostsWithUserData(posts, defaultPfp) {
   if (posts.length === 0) return [];
 
-  // Get unique usernames from posts only
+  // Collect usernames from posts
   const usernames = [...new Set(posts.map(p => p.username))];
-  const usersMap = {};
-  
-  if (usernames.length) {
-    const userSql = `SELECT username, profile_picture FROM users WHERE username IN (${usernames.map(() => '?').join(',')})`;
-    const [users] = await promisePool.execute(userSql, usernames);
 
+  // Also collect usernames from replyTo fields in posts
+  const replyToUsernames = posts
+    .map(post => {
+      try {
+        const replyTo = post.replyTo ? JSON.parse(post.replyTo) : null;
+        return replyTo?.username;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  // Combine all usernames
+  const allUsernames = [...new Set([...usernames, ...replyToUsernames])];
+
+  const usersMap = {};
+  if (allUsernames.length) {
+    const placeholders = allUsernames.map(() => '?').join(',');
+    const [users] = await promisePool.execute(
+      `SELECT username, profile_picture FROM users WHERE username IN (${placeholders})`,
+      allUsernames
+    );
     users.forEach(u => {
       usersMap[u.username.toLowerCase()] = u.profile_picture?.startsWith('data:image')
         ? u.profile_picture
-        : `data:image/jpeg;base64,${u.profile_picture}` || defaultPfp;
+        : u.profile_picture
+        ? `data:image/jpeg;base64,${u.profile_picture}`
+        : defaultPfp;
     });
   }
 
-  // Return lightweight post objects for feed view
-  return posts.map(p => ({
-    _id: p._id,
-    message: p.message,
-    timestamp: p.timestamp,
-    username: p.username,
-    likes: p.likes,
-    likedBy: (p.likedBy && typeof p.likedBy === 'string') ? JSON.parse(p.likedBy) : (p.likedBy || []),
-    commentCount: p.comments_count || 0, // ✅ Automatically maintained by database triggers
-    photo: p.photo?.startsWith('http') || p.photo?.startsWith('data:image')
-      ? p.photo
-      : p.photo ? `data:image/jpeg;base64,${p.photo.toString('base64')}` : null,
-    profilePicture: usersMap[p.username.toLowerCase()] || defaultPfp,
-    tags: p.tags ? (typeof p.tags === 'string' ? JSON.parse(p.tags) : p.tags) || [] : [],
-     replyTo: replyToData,
-    feedType: p.feedType || 'regular',
-    views_count: p.views_count || 0
-  }));
+  return posts.map(post => {
+    // Parse comments safely
+    let comments = [];
+    try {
+      comments = post.comments ? JSON.parse(post.comments) : [];
+    } catch {
+      comments = [];
+    }
+
+    // Enrich comments with profile pictures, including nested replies
+    const enrichedComments = comments.map(comment => ({
+      ...comment,
+      profilePicture: usersMap[comment.username?.toLowerCase()] || defaultPfp,
+      replies: (comment.replies || []).map(reply => ({
+        ...reply,
+        profilePicture: usersMap[reply.username?.toLowerCase()] || defaultPfp,
+      })),
+    }));
+
+    // Enrich replyTo data with profile picture
+    let replyToData = null;
+    try {
+      replyToData = post.replyTo ? JSON.parse(post.replyTo) : null;
+      if (replyToData) {
+        replyToData.profilePicture = usersMap[replyToData.username?.toLowerCase()] || defaultPfp;
+      }
+    } catch {
+      replyToData = null;
+    }
+
+    return {
+      _id: post._id,
+      message: post.message,
+      timestamp: post.timestamp,
+      username: post.username,
+      sessionId: post.sessionId,
+      likes: post.likes,
+      dislikes: post.dislikes,
+      likedBy: post.likedBy ? JSON.parse(post.likedBy) : [],
+      dislikedBy: post.dislikedBy ? JSON.parse(post.dislikedBy) : [],
+      hearts: post.hearts,
+      comments: enrichedComments,
+      photo: post.photo && (post.photo.startsWith('http') || post.photo.startsWith('data:image/'))
+        ? post.photo
+        : post.photo
+        ? `data:image/jpeg;base64,${post.photo.toString('base64')}`
+        : null,
+      profilePicture: usersMap[post.username.toLowerCase()] || defaultPfp,
+      tags: post.tags ? JSON.parse(post.tags) : [],
+      replyTo: replyToData,
+    };
+  });
 }
+
 
 
 
