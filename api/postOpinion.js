@@ -1,4 +1,5 @@
 const { promisePool } = require('../utils/db');
+const { v4: uuidv4 } = require('uuid');
 
 const allowedOrigins = [
   'https://latestnewsandaffairs.site',
@@ -30,7 +31,12 @@ const classifyPostContent = async (text) => {
     clearTimeout(timeout);
     if (!resp.ok) return null;
     const { label } = await resp.json();
-    const map = { story_rant: 'Story/Rant', sports: 'Sports', entertainment: 'Entertainment', news: 'News' };
+    const map = {
+      story_rant: 'Story/Rant',
+      sports: 'Sports',
+      entertainment: 'Entertainment',
+      news: 'News'
+    };
     return map[label.toLowerCase()] || null;
   } catch (_) {
     return null;
@@ -39,6 +45,7 @@ const classifyPostContent = async (text) => {
 
 const sendNotifications = async (conn, { username, postId, message, photo, tags, replyTo }) => {
   const tasks = [];
+
   // followers
   tasks.push((async () => {
     const [f] = await conn.execute(
@@ -48,7 +55,9 @@ const sendNotifications = async (conn, { username, postId, message, photo, tags,
       [username, username]
     );
     if (!f.length) return;
-    const preview = message ? message.slice(0, 50) + (message.length > 50 ? '…' : '') : (photo ? 'shared a photo' : 'made a post');
+    const preview = message
+      ? message.slice(0, 50) + (message.length > 50 ? '…' : '')
+      : (photo ? 'shared a photo' : 'made a post');
     const notif = `${username} posted: ${preview}`;
     const meta = JSON.stringify({ postId, postType: photo ? 'photo' : 'text', preview });
     await conn.execute(
@@ -57,6 +66,7 @@ const sendNotifications = async (conn, { username, postId, message, photo, tags,
       f.flatMap(({ username: u }) => [u, username, 'new_post', notif, meta])
     );
   })());
+
   // tags
   if (tags?.length) {
     tasks.push((async () => {
@@ -77,6 +87,7 @@ const sendNotifications = async (conn, { username, postId, message, photo, tags,
       );
     })());
   }
+
   // reply
   if (replyTo?.username && replyTo.username !== username) {
     tasks.push((async () => {
@@ -92,51 +103,13 @@ const sendNotifications = async (conn, { username, postId, message, photo, tags,
       );
     })());
   }
+
   await Promise.allSettled(tasks);
 };
 
 const handler = async (req, res) => {
   setCorsHeaders(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
-
-  if (req.method === 'PUT' || req.method === 'PATCH') {
-    const { postId, action, username } = req.body;
-    if (!postId || !action || !username || !['like', 'unlike'].includes(action)) {
-      return res.status(400).json({ message: 'Invalid request' });
-    }
-    try {
-      const [[post]] = await promisePool.execute('SELECT * FROM posts WHERE _id = ?', [postId]);
-      if (!post) return res.status(404).json({ message: 'Post not found' });
-
-      let likedBy = JSON.parse(post.likedBy || '[]');
-      if (action === 'like' && likedBy.includes(username)) {
-        return res.status(400).json({ message: 'Already liked' });
-      }
-      if (action === 'unlike' && !likedBy.includes(username)) {
-        return res.status(400).json({ message: 'Not liked yet' });
-      }
-      likedBy = action === 'like' ? [...likedBy, username] : likedBy.filter(u => u !== username);
-      const likes = action === 'like' ? post.likes + 1 : post.likes - 1;
-      await promisePool.execute('UPDATE posts SET likes = ?, likedBy = ? WHERE _id = ?', [likes, JSON.stringify(likedBy), postId]);
-
-      return res.status(200).json({
-        _id: postId,
-        message: post.message,
-        timestamp: post.timestamp,
-        username: post.username,
-        likes,
-        likedBy,
-        photo: post.photo,
-        profilePicture: post.profilePicture,
-        tags: JSON.parse(post.tags || '[]'),
-        replyTo: JSON.parse(post.replyTo || 'null'),
-        categories: post.categories || null
-      });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ message: 'Error updating post' });
-    }
-  }
 
   if (req.method === 'POST') {
     const { message, username, sessionId, photo, tags, replyTo } = req.body;
@@ -146,26 +119,42 @@ const handler = async (req, res) => {
 
     const conn = await promisePool.getConnection();
     await conn.beginTransaction();
-    try {
-      let profilePicture = 'https://latestnewsandaffairs.site/public/pfp1.jpg';
-      const [[ur]] = await conn.execute('SELECT profile_picture FROM users WHERE username = ? LIMIT 1', [username]);
-      if (ur?.profile_picture) profilePicture = ur.profile_picture;
 
+    try {
       const extractedTags = tags || [...new Set((message?.match(/@(\w+)/g) || []).map(t => t.slice(1)))];
+
       let replyToData = null;
       if (replyTo?.postId) {
-        const [[rp]] = await conn.execute('SELECT _id,username,message,photo,timestamp FROM posts WHERE _id = ?', [replyTo.postId]);
+        const [[rp]] = await conn.execute(
+          'SELECT _id,username,message,photo,timestamp FROM posts WHERE _id = ?',
+          [replyTo.postId]
+        );
         if (!rp) {
           await conn.rollback();
           return res.status(400).json({ message: 'Reply post not found' });
         }
-        replyToData = { postId: rp._id, username: rp.username, message: rp.message, photo: rp.photo, timestamp: rp.timestamp };
+        replyToData = {
+          postId: rp._id,
+          username: rp.username,
+          message: rp.message,
+          photo: rp.photo,
+          timestamp: rp.timestamp
+        };
       }
 
       const [{ insertId: postId }] = await conn.execute(
         `INSERT INTO posts (message, timestamp, username, sessionId, likes, likedBy, photo, tags, replyTo, categories)
          VALUES (?, NOW(), ?, ?, 0, ?, ?, ?, ?, ?)`,
-        [message || '', username, sessionId, '[]', photo || null, JSON.stringify(extractedTags), replyToData ? JSON.stringify(replyToData) : null, null]
+        [
+          message || '',
+          username,
+          sessionId,
+          '[]',
+          photo || null,
+          JSON.stringify(extractedTags),
+          replyToData ? JSON.stringify(replyToData) : null,
+          null
+        ]
       );
 
       const newPost = {
@@ -176,32 +165,41 @@ const handler = async (req, res) => {
         likes: 0,
         likedBy: [],
         photo: photo || null,
-        profilePicture,
+        profilePicture: null, // let frontend handle fallback
         tags: extractedTags,
         replyTo: replyToData,
         categories: null
       };
 
-      await sendNotifications(conn, { username, postId, message, photo, tags: extractedTags, replyTo: replyToData });
-
-      const category = await classifyPostContent(message);
-      if (category) {
-        await conn.execute('UPDATE posts SET categories = ? WHERE _id = ?', [category, postId]);
-        newPost.categories = category;
-      }
+      await sendNotifications(conn, {
+        username,
+        postId,
+        message,
+        photo,
+        tags: extractedTags,
+        replyTo: replyToData
+      });
 
       await conn.commit();
-      return res.status(201).json(newPost);
+      res.status(201).json(newPost);
+
+      // async post-classification (non-blocking)
+      classifyPostContent(message).then(async (category) => {
+        if (category) {
+          await promisePool.execute('UPDATE posts SET categories = ? WHERE _id = ?', [category, postId]);
+        }
+      }).catch(() => {});
+
     } catch (err) {
       await conn.rollback();
       console.error(err);
-      return res.status(500).json({ message: 'Error saving post' });
+      res.status(500).json({ message: 'Error saving post' });
     } finally {
       conn.release();
     }
+  } else {
+    res.status(405).json({ message: 'Method Not Allowed' });
   }
-
-  return res.status(405).json({ message: 'Method Not Allowed' });
 };
 
 module.exports = handler;
