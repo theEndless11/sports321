@@ -472,10 +472,12 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
       : p.photo ? `data:image/jpeg;base64,${p.photo.toString('base64')}` : null,
     profilePicture: usersMap[p.username.toLowerCase()] || defaultPfp,
     tags: p.tags ? (typeof p.tags === 'string' ? JSON.parse(p.tags) : p.tags) || [] : [],
+     replyTo: replyToData,
     feedType: p.feedType || 'regular',
     views_count: p.views_count || 0
   }));
 }
+
 
 
 
