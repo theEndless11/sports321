@@ -6,6 +6,31 @@ const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 };
 
+// Profile picture handler function
+const handleProfilePicture = (profilePicture) => {
+    if (!profilePicture) {
+        return 'https://latestnewsandaffairs.site/public/pfp.jpg';
+    }
+    
+    // If it's already a complete URL
+    if (profilePicture.startsWith('http://') || profilePicture.startsWith('https://')) {
+        return profilePicture;
+    }
+    
+    // If it's a data URL
+    if (profilePicture.startsWith('data:image/')) {
+        return profilePicture;
+    }
+    
+    // If it's base64 data without prefix
+    if (profilePicture && !profilePicture.startsWith('http') && !profilePicture.startsWith('data:')) {
+        return `data:image/jpeg;base64,${profilePicture}`;
+    }
+    
+    // Default fallback
+    return 'https://latestnewsandaffairs.site/public/pfp.jpg';
+};
+
 async function getActualCounts(username) {
     try {
         const [followersResult] = await promisePool.execute(
@@ -75,7 +100,8 @@ module.exports = async function handler(req, res) {
                 friendsCount: user.friendsCount || 0
             };
 
-            const userProfilePicture = user.profile_picture || 'https://latestnewsandaffairs.site/public/pfp.jpg';
+            // Use the helper function for profile picture
+            const userProfilePicture = handleProfilePicture(user.profile_picture);
 
             const postsQuery = 'SELECT _id, message, timestamp, username, sessionId, likes, likedBy, comments_count, views_count, photo FROM posts WHERE username = ?';
             const [postsResult] = await promisePool.execute(postsQuery, [username]);
@@ -94,7 +120,7 @@ module.exports = async function handler(req, res) {
                 photo: post.photo ? 
                     (post.photo.startsWith('http') || post.photo.startsWith('data:image/') ? 
                         post.photo : `data:image/jpeg;base64,${post.photo.toString('base64')}`) : null,
-                profilePicture: userProfilePicture,
+                profilePicture: userProfilePicture, // This ensures consistent profile picture across all posts
                 verified: Boolean(user.verified)
             }));
 
@@ -118,7 +144,10 @@ module.exports = async function handler(req, res) {
 
         } catch (error) {
             console.error("Error searching user and posts:", error);
-            return res.status(500).json({ message: 'Error retrieving user and posts', error });
+            return res.status(500).json({ 
+                message: 'Error retrieving user and posts', 
+                error: error.message 
+            });
         }
     }
 
