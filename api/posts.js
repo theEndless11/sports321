@@ -6,169 +6,100 @@ const setCorsHeaders = (res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 };
 
-// Enhanced feed algorithm with discovery-first approach
 module.exports = async function handler(req, res) {
   setCorsHeaders(res);
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const defaultPfp = 'https://latestnewsandaffairs.site/public/pfp.jpg';
 
   if (req.method === 'GET') {
-    const {
-      username,
-      username_like,
-      start_timestamp,
-      end_timestamp,
-      page = 1,
-      limit = 10,
-      sort,
-      userId
-    } = req.query;
+    const { username, username_like, start_timestamp, end_timestamp, page = 1, limit = 10, sort, userId } = req.query;
 
-    // Handle user profile fetch
     if (username && !username_like && !start_timestamp && !end_timestamp && !userId) {
       return await handleUserProfile(username, res);
     }
-
-    // Handle personalized feed (only for 'general' sort or no sort specified)
+    
     if (userId && (sort === 'general' || !sort)) {
       return await handlePersonalizedFeed(userId, page, limit, res, defaultPfp);
     }
 
-    // Handle regular posts fetching with category filtering
     return await handleRegularPostsFetch(req.query, res, defaultPfp);
   }
 };
 
-// === PERSONALIZED FEED ALGORITHM ===
 async function handlePersonalizedFeed(userId, page, limit, res, defaultPfp) {
   try {
-    console.log(`🎯 Generating personalized feed for user: ${userId}, page: ${page}`);
-    
-    // Get user data and relationships
     const userData = await getUserDataAndRelationships(userId);
-    if (!userData) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+    if (!userData) return res.status(404).json({ message: 'User not found' });
 
-    // Get recently viewed posts (last 30 days for performance)
     const recentlyViewed = await getRecentlyViewedPosts(userId);
-    
-    // Generate feed composition
     const feedPosts = await generateFeedComposition(userData, recentlyViewed, limit);
-    
-    // Enrich posts with user data
     const enrichedPosts = await enrichPostsWithUserData(feedPosts, defaultPfp);
-    
-    console.log(`✅ Generated ${enrichedPosts.length} posts for user ${userId}`);
-    
+
     return res.status(200).json({
       posts: enrichedPosts,
-      hasMorePosts: true, // Always true for infinite scroll
-      feedType: 'personalized',
-      composition: getActualComposition(feedPosts)
+      hasMorePosts: true,
+      feedType: 'personalized'
     });
-
   } catch (error) {
-    console.error('❌ Error in personalized feed:', error);
+    console.error('Personalized feed error:', error);
     return res.status(500).json({ error: 'Failed to generate personalized feed' });
   }
 }
 
-// === USER DATA AND RELATIONSHIPS ===
 async function getUserDataAndRelationships(userId) {
   try {
-    // Get user basic info and location
     const [userRows] = await promisePool.execute(
-      'SELECT username, city, region, country FROM users WHERE username = ?',
+      'SELECT username, city, country FROM users WHERE username = ?',
       [userId]
     );
+    if (!userRows.length) return null;
 
-    if (userRows.length === 0) return null;
-    const user = userRows[0];
-
-    // Get friends (accepted relationships)
     const [friendsRows] = await promisePool.execute(`
-      SELECT CASE 
-        WHEN follower = ? THEN following 
-        ELSE follower 
-      END as friend_username
-      FROM follows 
-      WHERE (follower = ? OR following = ?) 
-      AND relationship_status = 'accepted'
+      SELECT CASE WHEN follower = ? THEN following ELSE follower END as friend_username
+      FROM follows WHERE (follower = ? OR following = ?) AND relationship_status = 'accepted'
     `, [userId, userId, userId]);
 
-    // Get following (one-way follows)
     const [followingRows] = await promisePool.execute(`
-      SELECT following as following_username
-      FROM follows 
+      SELECT following as following_username FROM follows 
       WHERE follower = ? AND relationship_status = 'none'
     `, [userId]);
 
     return {
-      ...user,
+      ...userRows[0],
       friends: friendsRows.map(row => row.friend_username),
       following: followingRows.map(row => row.following_username)
     };
-
   } catch (error) {
-    console.error('Error getting user data:', error);
+    console.error('User data fetch error:', error);
     throw error;
   }
 }
 
-// === RECENTLY VIEWED POSTS ===
 async function getRecentlyViewedPosts(userId) {
   try {
     const [viewedRows] = await promisePool.execute(`
-      SELECT post_id 
-      FROM post_views 
-      WHERE user_id = ? 
-      AND viewed_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
-      ORDER BY viewed_at DESC
-      LIMIT 1000
+      SELECT post_id FROM post_views 
+      WHERE user_id = ? AND viewed_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
+      ORDER BY viewed_at DESC LIMIT 1000
     `, [userId]);
-
     return new Set(viewedRows.map(row => row.post_id));
   } catch (error) {
-    console.error('Error getting viewed posts:', error);
-    return new Set(); // Return empty set on error
+    console.error('Viewed posts error:', error);
+    return new Set();
   }
 }
 
-// === FEED COMPOSITION GENERATOR ===
 async function generateFeedComposition(userData, recentlyViewed, limit) {
   const posts = [];
-  
-  // Target composition for 10 posts:
-  const composition = {
-    random: 4,    // Increased from 3
-    following: 3, 
-    friends: 2,   // Increased from 1
-    regional: 1
-  };
+  const composition = { random: 4, following: 3, friends: 2, regional: 1 };
 
   try {
-    // 1. Get Random/Discovery posts (4 posts)
-    const randomPosts = await getRandomPosts(userData, recentlyViewed, composition.random);
-    posts.push(...randomPosts);
+    posts.push(...await getRandomPosts(userData, recentlyViewed, composition.random));
+    posts.push(...await getFollowingPosts(userData, recentlyViewed, composition.following));
+    posts.push(...await getFriendsPosts(userData, recentlyViewed, composition.friends));
+    posts.push(...await getRegionalPosts(userData, recentlyViewed, composition.regional));
 
-    // 2. Get Following posts (3 posts)  
-    const followingPosts = await getFollowingPosts(userData, recentlyViewed, composition.following);
-    posts.push(...followingPosts);
-
-    // 3. Get Friends posts (2 posts)
-    const friendsPosts = await getFriendsPosts(userData, recentlyViewed, composition.friends);
-    posts.push(...friendsPosts);
-
-    // 4. Get Regional posts (1 post)
-    const regionalPosts = await getRegionalPosts(userData, recentlyViewed, composition.regional);
-    posts.push(...regionalPosts);
-
-    // 5. Fill remaining slots with random if needed
     if (posts.length < limit) {
       const additionalRandom = await getRandomPosts(
         userData, 
@@ -178,74 +109,52 @@ async function generateFeedComposition(userData, recentlyViewed, limit) {
       posts.push(...additionalRandom);
     }
 
-    // 6. Shuffle to avoid predictable patterns
     return shuffleArray(posts).slice(0, limit);
-
   } catch (error) {
-    console.error('Error in feed composition:', error);
-    // Fallback to random posts
+    console.error('Feed composition error:', error);
     return await getRandomPosts(userData, recentlyViewed, limit);
   }
 }
 
-// === CONTENT FETCHING FUNCTIONS ===
 async function getRandomPosts(userData, recentlyViewed, count) {
   if (count <= 0) return [];
   
-  const viewedFilter = recentlyViewed.size > 0 
-    ? `AND p._id NOT IN (${Array.from(recentlyViewed).map(() => '?').join(',')})` 
-    : '';
+  const viewedCase = recentlyViewed.size > 0 ? 
+    `CASE WHEN p._id IN (${Array.from(recentlyViewed).map(() => '?').join(',')}) THEN 1 ELSE 0 END` : '0';
   
   const [posts] = await promisePool.execute(`
-    SELECT p.* FROM posts p
-    WHERE p.timestamp > DATE_SUB(NOW(), INTERVAL 7 DAY)
-    ${viewedFilter}
-    ORDER BY RAND()
-    LIMIT ?
+    SELECT p.* FROM posts p WHERE p.timestamp > DATE_SUB(NOW(), INTERVAL 7 DAY) 
+    ORDER BY ${viewedCase}, RAND() LIMIT ?
   `, [...Array.from(recentlyViewed), count]);
 
   return posts.map(post => ({ ...post, feedType: 'random' }));
 }
 
 async function getFollowingPosts(userData, recentlyViewed, count) {
-  if (count <= 0 || userData.following.length === 0) {
-    return await getRandomPosts(userData, recentlyViewed, count);
-  }
+  if (count <= 0 || !userData.following.length) return await getRandomPosts(userData, recentlyViewed, count);
 
-  const viewedFilter = recentlyViewed.size > 0 
-    ? `AND p._id NOT IN (${Array.from(recentlyViewed).map(() => '?').join(',')})` 
-    : '';
-
+  const viewedCase = recentlyViewed.size > 0 ? 
+    `CASE WHEN p._id IN (${Array.from(recentlyViewed).map(() => '?').join(',')}) THEN 1 ELSE 0 END` : '0';
   const followingPlaceholders = userData.following.map(() => '?').join(',');
   
   const [posts] = await promisePool.execute(`
-    SELECT p.* FROM posts p
-    WHERE p.username IN (${followingPlaceholders})
-    ${viewedFilter}
-    ORDER BY p.timestamp DESC
-    LIMIT ?
+    SELECT p.* FROM posts p WHERE p.username IN (${followingPlaceholders}) 
+    ORDER BY ${viewedCase}, p.timestamp DESC LIMIT ?
   `, [...userData.following, ...Array.from(recentlyViewed), count]);
 
   return posts.map(post => ({ ...post, feedType: 'following' }));
 }
 
 async function getFriendsPosts(userData, recentlyViewed, count) {
-  if (count <= 0 || userData.friends.length === 0) {
-    return await getRandomPosts(userData, recentlyViewed, count);
-  }
+  if (count <= 0 || !userData.friends.length) return await getRandomPosts(userData, recentlyViewed, count);
 
-  const viewedFilter = recentlyViewed.size > 0 
-    ? `AND p._id NOT IN (${Array.from(recentlyViewed).map(() => '?').join(',')})` 
-    : '';
-
+  const viewedCase = recentlyViewed.size > 0 ? 
+    `CASE WHEN p._id IN (${Array.from(recentlyViewed).map(() => '?').join(',')}) THEN 1 ELSE 0 END` : '0';
   const friendsPlaceholders = userData.friends.map(() => '?').join(',');
   
   const [posts] = await promisePool.execute(`
-    SELECT p.* FROM posts p
-    WHERE p.username IN (${friendsPlaceholders})
-    ${viewedFilter}
-    ORDER BY (p.likes + p.hearts + CHAR_LENGTH(p.comments)) DESC, p.timestamp DESC
-    LIMIT ?
+    SELECT p.* FROM posts p WHERE p.username IN (${friendsPlaceholders}) 
+    ORDER BY ${viewedCase}, (p.likes + p.hearts + CHAR_LENGTH(p.comments)) DESC, p.timestamp DESC LIMIT ?
   `, [...userData.friends, ...Array.from(recentlyViewed), count]);
 
   return posts.map(post => ({ ...post, feedType: 'friends' }));
@@ -254,63 +163,31 @@ async function getFriendsPosts(userData, recentlyViewed, count) {
 async function getRegionalPosts(userData, recentlyViewed, count) {
   if (count <= 0) return [];
 
-  const viewedFilter = recentlyViewed.size > 0 
-    ? `AND p._id NOT IN (${Array.from(recentlyViewed).map(() => '?').join(',')})` 
-    : '';
-
-  // Try city first, then region, then country
+  const viewedCase = recentlyViewed.size > 0 ? 
+    `CASE WHEN p._id IN (${Array.from(recentlyViewed).map(() => '?').join(',')}) THEN 1 ELSE 0 END` : '0';
   let posts = [];
   
-  // City-level posts
   if (userData.city && posts.length < count) {
     const [cityPosts] = await promisePool.execute(`
-      SELECT p.* FROM posts p
-      JOIN users u ON p.username = u.username
-      WHERE u.city = ? AND p.username != ?
-      ${viewedFilter}
-      AND p.timestamp > DATE_SUB(NOW(), INTERVAL 3 DAY)
-      ORDER BY (p.likes + p.hearts) DESC, p.timestamp DESC
-      LIMIT ?
+      SELECT p.* FROM posts p JOIN users u ON p.username = u.username
+      WHERE u.city = ? AND p.username != ? AND p.timestamp > DATE_SUB(NOW(), INTERVAL 3 DAY)
+      ORDER BY ${viewedCase}, (p.likes + p.hearts) DESC, p.timestamp DESC LIMIT ?
     `, [userData.city, userData.username, ...Array.from(recentlyViewed), count]);
-    
     posts.push(...cityPosts.map(post => ({ ...post, feedType: 'regional-city' })));
   }
 
-  // Region-level posts if not enough city posts
-  if (userData.region && posts.length < count) {
-    const remaining = count - posts.length;
-    const [regionPosts] = await promisePool.execute(`
-      SELECT p.* FROM posts p
-      JOIN users u ON p.username = u.username
-      WHERE u.region = ? AND p.username != ?
-      ${viewedFilter}
-      AND p._id NOT IN (${posts.map(() => '?').join(',') || "''"})
-      AND p.timestamp > DATE_SUB(NOW(), INTERVAL 5 DAY)
-      ORDER BY (p.likes + p.hearts) DESC, p.timestamp DESC
-      LIMIT ?
-    `, [userData.region, userData.username, ...Array.from(recentlyViewed), ...posts.map(p => p._id), remaining]);
-    
-    posts.push(...regionPosts.map(post => ({ ...post, feedType: 'regional-region' })));
-  }
-
-  // Country-level posts if still not enough
   if (userData.country && posts.length < count) {
     const remaining = count - posts.length;
+    const excludePosts = posts.map(() => '?').join(',') || "''";
     const [countryPosts] = await promisePool.execute(`
-      SELECT p.* FROM posts p
-      JOIN users u ON p.username = u.username
-      WHERE u.country = ? AND p.username != ?
-      ${viewedFilter}
-      AND p._id NOT IN (${posts.map(() => '?').join(',') || "''"})
-      AND p.timestamp > DATE_SUB(NOW(), INTERVAL 7 DAY)
-      ORDER BY (p.likes + p.hearts) DESC, p.timestamp DESC
-      LIMIT ?
-    `, [userData.country, userData.username, ...Array.from(recentlyViewed), ...posts.map(p => p._id), remaining]);
-    
+      SELECT p.* FROM posts p JOIN users u ON p.username = u.username
+      WHERE u.country = ? AND p.username != ? AND p._id NOT IN (${excludePosts})
+      AND p.timestamp > DATE_SUB(NOW(), INTERVAL 7 DAY) 
+      ORDER BY ${viewedCase}, (p.likes + p.hearts) DESC, p.timestamp DESC LIMIT ?
+    `, [userData.country, userData.username, ...posts.map(p => p._id), ...Array.from(recentlyViewed), remaining]);
     posts.push(...countryPosts.map(post => ({ ...post, feedType: 'regional-country' })));
   }
 
-  // Fill with random if still not enough
   if (posts.length < count) {
     const additionalRandom = await getRandomPosts(
       userData, 
@@ -323,7 +200,6 @@ async function getRegionalPosts(userData, recentlyViewed, count) {
   return posts.slice(0, count);
 }
 
-// === UTILITY FUNCTIONS ===
 function shuffleArray(array) {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -333,28 +209,18 @@ function shuffleArray(array) {
   return shuffled;
 }
 
-function getActualComposition(posts) {
-  const composition = {};
-  posts.forEach(post => {
-    const type = post.feedType || 'unknown';
-    composition[type] = (composition[type] || 0) + 1;
-  });
-  return composition;
-}
-
-// === EXISTING FUNCTIONS (keeping your original logic) ===
 async function handleUserProfile(username, res) {
   const [rows] = await promisePool.execute(
-    'SELECT username, profile_picture, Music, description, created_at FROM users WHERE username = ?',
+    'SELECT username, profile_picture, verified, Music, description, created_at FROM users WHERE username = ?',
     [username]
   );
-  if (rows.length === 0) {
-    return res.status(404).json({ message: 'User not found' });
-  }
+  if (!rows.length) return res.status(404).json({ message: 'User not found' });
+  
   const user = rows[0];
   return res.status(200).json({
     username: user.username,
     profilePicture: user.profile_picture,
+    verified: Boolean(user.verified),
     Music: user.Music || 'Music not available',
     description: user.description || 'No description available',
     created_at: user.created_at || 'created_at not available'
@@ -362,45 +228,27 @@ async function handleUserProfile(username, res) {
 }
 
 async function handleRegularPostsFetch(query, res, defaultPfp) {
-  const {
-    username_like,
-    start_timestamp,
-    end_timestamp,
-    page = 1,
-    limit = 10,
-    sort,
-  } = query;
-
+  const { username_like, start_timestamp, end_timestamp, page = 1, limit = 10, sort } = query;
+  
   let sql = 'SELECT * FROM posts';
   const params = [];
+  const conditions = [];
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
-  const conditions = [];
-
-  if (username_like) {
-    conditions.push('username LIKE ?');
-    params.push(`%${username_like}%`);
-  }
-
+  if (username_like) { conditions.push('username LIKE ?'); params.push(`%${username_like}%`); }
+  
   if (start_timestamp && end_timestamp) {
     conditions.push('timestamp BETWEEN ? AND ?');
     params.push(start_timestamp, end_timestamp);
   }
 
   if (sort && ['story_rant', 'sports', 'entertainment', 'news'].includes(sort)) {
-    const categoryMap = {
-      story_rant: 'Story/Rant',
-      sports: 'Sports',
-      entertainment: 'Entertainment',
-      news: 'News',
-    };
+    const categoryMap = { story_rant: 'Story/Rant', sports: 'Sports', entertainment: 'Entertainment', news: 'News' };
     conditions.push('categories = ?');
     params.push(categoryMap[sort]);
   }
 
-  if (conditions.length > 0) {
-    sql += ' WHERE ' + conditions.join(' AND ');
-  }
+  if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
 
   const sortOptions = {
     trending: '(likes + comments_count + IFNULL(hearts, 0)) DESC, timestamp DESC',
@@ -418,64 +266,42 @@ async function handleRegularPostsFetch(query, res, defaultPfp) {
   const [posts] = await promisePool.execute(sql, params);
   const enrichedPosts = await enrichPostsWithUserData(posts, defaultPfp);
 
-  // Count total posts matching the filters
   let countQuery = 'SELECT COUNT(*) AS count FROM posts';
-  if (conditions.length > 0) {
-    countQuery += ' WHERE ' + conditions.join(' AND ');
-  }
+  if (conditions.length) countQuery += ' WHERE ' + conditions.join(' AND ');
   const countParams = params.slice(0, params.length - 2);
   const [countResult] = await promisePool.execute(countQuery, countParams);
 
   return res.status(200).json({
     posts: enrichedPosts,
     hasMorePosts: (page * limit) < countResult[0].count,
-    filterType: sort === 'general' ? 'general' : (sort || 'general'),
+    filterType: sort || 'general',
   });
 }
 
 async function enrichPostsWithUserData(posts, defaultPfp) {
-  if (posts.length === 0) return [];
+  if (!posts.length) return [];
   
-  // Get unique usernames from posts only
   const usernames = [...new Set(posts.map(p => p.username))];
-  
-  // Also get usernames from replyTo if any
-  const replyToUsernames = posts
-    .map(p => {
-      try {
-        const replyTo = p.replyTo ? JSON.parse(p.replyTo) : null;
-        return replyTo?.username;
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
-  
-  // Combine usernames from posts and replyTo
+  const replyToUsernames = posts.map(p => {
+    try { return p.replyTo ? JSON.parse(p.replyTo)?.username : null; } catch { return null; }
+  }).filter(Boolean);
   const allUsernames = [...new Set([...usernames, ...replyToUsernames])];
-  
   const usersMap = {};
   
   if (allUsernames.length) {
-    // Updated SQL query to include verified column
     const userSql = `SELECT username, profile_picture, verified FROM users WHERE username IN (${allUsernames.map(() => '?').join(',')})`;
     const [users] = await promisePool.execute(userSql, allUsernames);
     
     users.forEach(u => {
       usersMap[u.username.toLowerCase()] = {
-        profilePicture: u.profile_picture?.startsWith('data:image')
-          ? u.profile_picture
-          : u.profile_picture
-          ? `data:image/jpeg;base64,${u.profile_picture}`
-          : defaultPfp,
-        verified: u.verified === 1 || u.verified === true // Handle both tinyint(1) and boolean
+        profilePicture: u.profile_picture?.startsWith('data:image') ? u.profile_picture : 
+          u.profile_picture ? `data:image/jpeg;base64,${u.profile_picture}` : defaultPfp,
+        verified: Boolean(u.verified)
       };
     });
   }
   
-  // Return lightweight post objects for feed view
   return posts.map(p => {
-    // Enrich replyTo if present
     let replyToData = null;
     try {
       replyToData = p.replyTo ? JSON.parse(p.replyTo) : null;
@@ -484,9 +310,7 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
         replyToData.profilePicture = replyToUserData?.profilePicture || defaultPfp;
         replyToData.verified = replyToUserData?.verified || false;
       }
-    } catch {
-      replyToData = null;
-    }
+    } catch { replyToData = null; }
     
     const userData = usersMap[p.username.toLowerCase()];
     
@@ -498,11 +322,10 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
       likes: p.likes,
       likedBy: (p.likedBy && typeof p.likedBy === 'string') ? JSON.parse(p.likedBy) : (p.likedBy || []),
       commentCount: p.comments_count || 0,
-      photo: p.photo?.startsWith('http') || p.photo?.startsWith('data:image')
-        ? p.photo
-        : p.photo ? `data:image/jpeg;base64,${p.photo.toString('base64')}` : null,
+      photo: p.photo?.startsWith('http') || p.photo?.startsWith('data:image') ? p.photo : 
+        p.photo ? `data:image/jpeg;base64,${p.photo.toString('base64')}` : null,
       profilePicture: userData?.profilePicture || defaultPfp,
-      verified: userData?.verified || false, // Add verified status
+      verified: userData?.verified || false,
       tags: p.tags ? (typeof p.tags === 'string' ? JSON.parse(p.tags) : p.tags) || [] : [],
       feedType: p.feedType || 'regular',
       views_count: p.views_count || 0,
@@ -510,12 +333,6 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     };
   });
 }
-
-
-
-
-
-
 
 
 
