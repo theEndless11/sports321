@@ -315,7 +315,7 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     const userData = usersMap[p.username.toLowerCase()];
     
     return {
-      id: p.id,
+      _id: p._id,
       message: p.message,
       timestamp: p.timestamp,
       username: p.username,
@@ -333,6 +333,7 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     };
   });
 }
+
 
 
 
