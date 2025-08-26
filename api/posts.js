@@ -435,10 +435,10 @@ async function handleRegularPostsFetch(query, res, defaultPfp) {
 
 async function enrichPostsWithUserData(posts, defaultPfp) {
   if (posts.length === 0) return [];
-
+  
   // Get unique usernames from posts only
   const usernames = [...new Set(posts.map(p => p.username))];
-
+  
   // Also get usernames from replyTo if any
   const replyToUsernames = posts
     .map(p => {
@@ -450,24 +450,29 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
       }
     })
     .filter(Boolean);
-
+  
   // Combine usernames from posts and replyTo
   const allUsernames = [...new Set([...usernames, ...replyToUsernames])];
-
+  
   const usersMap = {};
+  
   if (allUsernames.length) {
-    const userSql = `SELECT username, profile_picture FROM users WHERE username IN (${allUsernames.map(() => '?').join(',')})`;
+    // Updated SQL query to include verified column
+    const userSql = `SELECT username, profile_picture, verified FROM users WHERE username IN (${allUsernames.map(() => '?').join(',')})`;
     const [users] = await promisePool.execute(userSql, allUsernames);
-
+    
     users.forEach(u => {
-      usersMap[u.username.toLowerCase()] = u.profile_picture?.startsWith('data:image')
-        ? u.profile_picture
-        : u.profile_picture
-        ? `data:image/jpeg;base64,${u.profile_picture}`
-        : defaultPfp;
+      usersMap[u.username.toLowerCase()] = {
+        profilePicture: u.profile_picture?.startsWith('data:image')
+          ? u.profile_picture
+          : u.profile_picture
+          ? `data:image/jpeg;base64,${u.profile_picture}`
+          : defaultPfp,
+        verified: u.verified === 1 || u.verified === true // Handle both tinyint(1) and boolean
+      };
     });
   }
-
+  
   // Return lightweight post objects for feed view
   return posts.map(p => {
     // Enrich replyTo if present
@@ -475,28 +480,33 @@ async function enrichPostsWithUserData(posts, defaultPfp) {
     try {
       replyToData = p.replyTo ? JSON.parse(p.replyTo) : null;
       if (replyToData) {
-        replyToData.profilePicture = usersMap[replyToData.username?.toLowerCase()] || defaultPfp;
+        const replyToUserData = usersMap[replyToData.username?.toLowerCase()];
+        replyToData.profilePicture = replyToUserData?.profilePicture || defaultPfp;
+        replyToData.verified = replyToUserData?.verified || false;
       }
     } catch {
       replyToData = null;
     }
-
+    
+    const userData = usersMap[p.username.toLowerCase()];
+    
     return {
-      _id: p._id,
+      id: p.id,
       message: p.message,
       timestamp: p.timestamp,
       username: p.username,
       likes: p.likes,
       likedBy: (p.likedBy && typeof p.likedBy === 'string') ? JSON.parse(p.likedBy) : (p.likedBy || []),
-      commentCount: p.comments_count || 0, // ✅ untouched, as per your request
+      commentCount: p.comments_count || 0,
       photo: p.photo?.startsWith('http') || p.photo?.startsWith('data:image')
         ? p.photo
         : p.photo ? `data:image/jpeg;base64,${p.photo.toString('base64')}` : null,
-      profilePicture: usersMap[p.username.toLowerCase()] || defaultPfp,
+      profilePicture: userData?.profilePicture || defaultPfp,
+      verified: userData?.verified || false, // Add verified status
       tags: p.tags ? (typeof p.tags === 'string' ? JSON.parse(p.tags) : p.tags) || [] : [],
       feedType: p.feedType || 'regular',
       views_count: p.views_count || 0,
-      replyTo: replyToData // <-- added enriched replyTo here
+      replyTo: replyToData
     };
   });
 }
