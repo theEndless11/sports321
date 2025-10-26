@@ -1,7 +1,7 @@
 const { promisePool } = require('../utils/db');
 
 const allowedOrigins = [
-  'https://latestnewsandaffairs.site',
+  'https://endless.sbs',
   'http://localhost:5173'
 ];
 
