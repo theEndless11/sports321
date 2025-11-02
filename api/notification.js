@@ -1,9 +1,8 @@
 const { promisePool } = require('../utils/db');
 
 const allowedOrigins = [
-  'https://latestnewsandaffairs.site',
-  'http://localhost:5173',
-  'https://sports321.vercel.app',
+  '*',
+  'http://localhost:5173'
 ];
 
 const setCorsHeaders = (req, res) => {
