@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 
 // --- Utility ---
 const setCorsHeaders = (res) => {
-  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -194,6 +194,7 @@ module.exports = async function handler(req, res) {
 
   return res.status(405).json({ message: 'Method Not Allowed' });
 };
+
 
 
 
